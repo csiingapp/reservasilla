@@ -43,7 +43,7 @@
   .brandline{display:flex; align-items:center; gap:12px}
   .brandbar{width:6px; height:36px; background:var(--brand); border-radius:3px}
   .brandname{font-family:"Archivo"; font-weight:700; letter-spacing:.08em; text-transform:uppercase; font-size:1.15rem}
-  .brandtag{display:block; font-size:.7rem; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); font-weight:600; margin-top:3px}
+  .brandtag{display:block; font-size:.72rem; letter-spacing:.16em; text-transform:none; color:var(--muted); font-weight:600; margin-top:3px}
   h1{font-family:"Archivo"; font-weight:700; font-size:clamp(1.7rem,4.5vw,2.5rem); margin:14px 0 4px; line-height:1.05}
   .sub{color:var(--muted); max-width:62ch; font-size:.96rem}
   .userbar{margin-top:14px; font-size:.84rem; color:var(--muted); display:flex; align-items:center; gap:12px; flex-wrap:wrap}
@@ -77,6 +77,16 @@
   .pbtn .nm{font-weight:600}
   .pbtn .em{display:block; font-size:.76rem; color:var(--muted); font-weight:500}
   .pnone{color:var(--muted); font-size:.9rem; padding:12px 2px}
+
+  .pinwrap{position:fixed; inset:0; background:rgba(27,36,51,.45); display:flex; align-items:center; justify-content:center; padding:20px; z-index:60}
+  .pincard{background:#fff; border-radius:16px; box-shadow:var(--shadow); padding:22px; width:100%; max-width:360px}
+  .pintitle{font-family:"Archivo"; font-weight:700; font-size:1.2rem}
+  .pinsub{color:var(--muted); font-size:.9rem; margin:6px 0 14px}
+  .pininput{width:100%; max-width:none; text-align:center; letter-spacing:.5em; font-size:1.4rem; font-weight:700; padding:12px; margin-bottom:10px; border:1.5px solid var(--line); border-radius:10px; background:#fff; color:var(--ink)}
+  .pininput:focus{outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(200,16,46,.18)}
+  .pinmsg{color:var(--ocup-tx); font-size:.85rem; min-height:1.1em; margin-bottom:6px}
+  .pinactions{display:flex; gap:10px; justify-content:flex-end}
+  .pinforgot{margin-top:12px; font-size:.78rem; color:var(--muted); line-height:1.4}
 
   .modenote{font-size:.84rem; padding:11px 14px; border-radius:11px; line-height:1.45}
   .modenote.local{background:#fff7e6; color:#7a4f00; border:1px solid #f3dca0}
@@ -139,6 +149,10 @@
   .seat.mine{background:var(--mine-bg); border-color:var(--mine-bd); color:var(--mine-tx)}
   .seat.ocup:hover{transform:none}
   .seat.pend{background:#fff4e0; border-color:#d98b1f; border-style:dashed; color:#9a5b00}
+  .seat.block{background:#eceff3; border-color:#cfd6df; color:#97a2b1; cursor:not-allowed;
+    background-image:repeating-linear-gradient(45deg, transparent 0 6px, rgba(148,163,184,.20) 6px 12px)}
+  .seat.block:hover{transform:none; box-shadow:none}
+  .seat.block .id{color:#97a2b1}
   .entrada{margin-top:18px; display:flex; align-items:center; gap:10px; color:var(--muted); font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; font-family:"Archivo"}
   .entrada::before,.entrada::after{content:""; flex:1; height:1px; background:var(--line)}
   .door{display:inline-flex; align-items:center; gap:7px; padding:5px 12px; border:1.5px dashed var(--line); border-radius:20px; color:var(--ink); text-align:center}
@@ -149,6 +163,7 @@
   .chip.libre{background:var(--libre-bg); border-color:var(--libre-bd)}
   .chip.ocup{background:var(--ocup-bg); border-color:var(--ocup-bd)}
   .chip.mine{background:var(--mine-bg); border-color:var(--mine-bd)}
+  .chip.block{background:#eceff3; border-color:#cfd6df; background-image:repeating-linear-gradient(45deg, transparent 0 3px, rgba(148,163,184,.30) 3px 6px)}
 
   .btn{font:inherit; font-weight:700; cursor:pointer; border-radius:10px; padding:11px 18px; border:1.5px solid var(--brand-d); background:var(--brand); color:#fff}
   .btn.ghost{background:#fff; color:var(--ink); border-color:var(--line)}
@@ -176,10 +191,10 @@
 <div class="wrap">
   <header class="site">
     <div class="brandline"><span class="brandbar"></span>
-      <span><span class="brandname">CSI</span><span class="brandtag">Ingeniería · Arquitectura</span></span>
+      <span><span class="brandname">CSI</span><span class="brandtag">GTLyT</span></span>
     </div>
     <h1>Reservá tu asiento</h1>
-    <p class="sub">Elegí el día y el turno, y tocá una silla libre. Gris es libre, rojo está reservado y verde es tu lugar. Podés cancelar hasta 24&nbsp;horas antes.</p>
+    <p class="sub">Elegí el día y el turno, y tocá una silla libre. Gris es libre, rojo está reservado y verde es tu lugar. Podés cancelar sin costo hasta 4&nbsp;h antes del turno; si cancelás más tarde, te toca traer bizcochos 🥐.</p>
     <div id="userbar" class="userbar" hidden>Entraste como <b id="userEmail"></b><button id="logout" class="btn ghost tiny">No soy yo / Salir</button></div>
   </header>
 
@@ -225,6 +240,7 @@
         <span><i class="chip libre"></i> Libre</span>
         <span><i class="chip ocup"></i> Reservado</span>
         <span><i class="chip mine"></i> Tu reserva</span>
+        <span><i class="chip block"></i> No disponible</span>
       </div>
     </section>
   </div>
@@ -236,6 +252,7 @@
 
 <div id="confirmBar" class="confirmbar"><div class="inner"></div></div>
 <div id="toast" class="toast"></div>
+<div id="pinWrap" class="pinwrap" hidden></div>
 
 <script>
 /* ════════════════════════════════════════════════════════════════════════
@@ -310,7 +327,7 @@ const PERSONAS = [
    2) AJUSTES DE LA OFICINA
    ════════════════════════════════════════════════════════════════════════ */
 const CONFIG = {
-  tz: "-03:00", cancelarAntesHoras: 24, semanasVisibles: 2, diasLaborables: [1,2,3,4,5],
+  tz: "-03:00", cancelarAntesHoras: 4, semanasVisibles: 2, diasLaborables: [1,2,3,4,5],
   bloques: [
     { id:"AM", label:"Mañana", horario:"08:00–12:00", inicio:"08:00" },
     { id:"PM", label:"Tarde",  horario:"13:00–17:00", inicio:"13:00" },
@@ -323,6 +340,11 @@ const CONFIG = {
 };
 const SALAS = [ { id:"113", nombre:"OFIC. 113" }, { id:"112", nombre:"OFIC. 112" } ];
 const POR_POD = 6; const PODS_POR_SALA = 2;
+
+/* Puestos BLOQUEADOS (no disponibles para la lista de mails). Aparecen tachados y no se pueden reservar.
+   Para desbloquear alguno, borrá su id de acá. Ids: "SALA-NN" (ej. "112-01"). */
+const BLOQUEADOS = ["112-01","112-02","112-03","112-04","112-05","112-06"];
+const esBloqueado = (id)=> BLOQUEADOS.includes(id);
 const ASIENTOS = [];
 SALAS.forEach(s=>{ for(let p=0;p<PODS_POR_SALA;p++){ for(let i=0;i<POR_POD;i++){
   const n=p*POR_POD+i+1;
@@ -373,10 +395,12 @@ function miAsiento(bid){
 let Store=null, AU=null, AUTH=null, GPROVIDER=null;
 
 const LocalStore = {
-  KR:"csi:reservas", KA:"csi:asistencia", res:{}, asist:{}, _cb:null, _fecha:null,
+  KR:"csi:reservas", KA:"csi:asistencia", KU:"csi:usuarios", res:{}, asist:{}, usuarios:{}, _cb:null, _fecha:null,
   init(){ try{this.res=JSON.parse(localStorage.getItem(this.KR)||"{}")}catch(e){this.res={}}
-          try{this.asist=JSON.parse(localStorage.getItem(this.KA)||"{}")}catch(e){this.asist={}} return this; },
+          try{this.asist=JSON.parse(localStorage.getItem(this.KA)||"{}")}catch(e){this.asist={}}
+          try{this.usuarios=JSON.parse(localStorage.getItem(this.KU)||"{}")}catch(e){this.usuarios={}} return this; },
   _persist(){ try{localStorage.setItem(this.KR,JSON.stringify(this.res)); localStorage.setItem(this.KA,JSON.stringify(this.asist));}catch(e){} },
+  _persistU(){ try{localStorage.setItem(this.KU,JSON.stringify(this.usuarios));}catch(e){} },
   onData(fecha,cb){ this._fecha=fecha; this._cb=cb; this._emit(); },
   _emit(){ if(!this._cb) return; const reservas={}, asistencia={};
     for(const r of Object.values(this.res)) if(r.fecha===this._fecha) reservas[`${r.asiento}__${r.bloque}`]=r;
@@ -386,12 +410,14 @@ const LocalStore = {
   async cancelar(id){ delete this.res[id]; this._persist(); this._emit(); },
   async setAsist(id,data){ this.asist[id]=data; this._persist(); this._emit(); },
   async delAsist(id){ delete this.asist[id]; this._persist(); this._emit(); },
+  async getUsuario(email){ return this.usuarios[email]||null; },
+  async setUsuario(email,data){ this.usuarios[email]=data; this._persistU(); },
 };
 LocalStore.init();
 window.addEventListener("storage",()=>{ if(Store===LocalStore){ LocalStore.init(); LocalStore._emit(); }});
 
 function makeFirebaseStore(fs, db){
-  const { collection, doc, onSnapshot, query, where, runTransaction, deleteDoc, setDoc } = fs;
+  const { collection, doc, onSnapshot, query, where, runTransaction, deleteDoc, setDoc, getDoc } = fs;
   let unsubR=null, unsubA=null, reservas={}, asistencia={};
   return {
     onData(fecha,cb){
@@ -407,6 +433,8 @@ function makeFirebaseStore(fs, db){
     async cancelar(id){ await deleteDoc(doc(db,"reservas",id)); },
     async setAsist(id,data){ await setDoc(doc(db,"asistencia",id),data); },
     async delAsist(id){ await deleteDoc(doc(db,"asistencia",id)); },
+    async getUsuario(email){ const s=await getDoc(doc(db,"usuarios",email)); return s.exists()? s.data() : null; },
+    async setUsuario(email,data){ await setDoc(doc(db,"usuarios",email),data); },
   };
 }
 function subscribe(){ Store.onData(state.fecha, (data)=>{
@@ -471,6 +499,63 @@ function renderPicker(filtro){
     </button>`).join("");
   if(state.authError) setLoginMsg(state.authError,"err");
 }
+/* ── PIN personal (evita que otro entre con tu nombre desde otro dispositivo) ── */
+async function hashPin(email, pin){
+  const raw="csi-puestos-2026::"+(email||"").toLowerCase()+"::"+pin;
+  if(window.crypto && crypto.subtle){
+    const buf=await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  let h=0; for(let i=0;i<raw.length;i++){ h=(h*31 + raw.charCodeAt(i))|0; } return "x"+(h>>>0).toString(16);
+}
+async function elegirPersona(persona){
+  setLoginMsg("","");
+  let u=null;
+  try{ u = await Store.getUsuario(persona.email); }
+  catch(e){ console.error(e); setLoginMsg("No se pudo verificar ahora. Reintentá en unos segundos.","err"); return; }
+  mostrarPin(persona, u);
+}
+function cerrarPin(){ const w=$("pinWrap"); w.hidden=true; w.innerHTML=""; }
+function mostrarPin(persona, u){
+  const nuevo=!u, primerNombre=persona.nombre.split(/\s+/)[0];
+  const w=$("pinWrap");
+  w.innerHTML=`
+    <div class="pincard">
+      <div class="pintitle">Hola, ${primerNombre}</div>
+      <p class="pinsub">${nuevo
+        ? "Creá tu PIN de 4 dígitos. Te lo vamos a pedir para entrar desde otro dispositivo."
+        : "Ingresá tu PIN de 4 dígitos para entrar."}</p>
+      <input id="pin1" class="pininput" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" />
+      ${nuevo ? `<input id="pin2" class="pininput" type="password" inputmode="numeric" maxlength="4" placeholder="Repetí el PIN" autocomplete="off" />` : ``}
+      <div id="pinMsg" class="pinmsg"></div>
+      <div class="pinactions">
+        <button id="pinCancel" class="btn ghost">Volver</button>
+        <button id="pinOk" class="btn">${nuevo ? "Guardar y entrar" : "Entrar"}</button>
+      </div>
+      ${nuevo ? `` : `<div class="pinforgot">¿Olvidaste tu PIN? Pedile a quien administra la app que lo reinicie.</div>`}`
+    +`</div>`;
+  w.hidden=false;
+  const pin1=$("pin1"); pin1.focus();
+  const done=async ()=>{
+    const v1=(pin1.value||"").trim();
+    if(!/^\d{4}$/.test(v1)){ $("pinMsg").textContent="El PIN son 4 números."; return; }
+    if(nuevo){
+      const v2=(($("pin2").value)||"").trim();
+      if(v1!==v2){ $("pinMsg").textContent="Los dos PIN no coinciden."; return; }
+      const hash=await hashPin(persona.email, v1);
+      try{ await Store.setUsuario(persona.email,{ nombre:persona.nombre, pinHash:hash, creado:Date.now() }); }
+      catch(e){ console.error(e); $("pinMsg").textContent="No se pudo guardar. Reintentá."; return; }
+      cerrarPin(); entrar(persona);
+    } else {
+      const hash=await hashPin(persona.email, v1);
+      if(hash===u.pinHash){ cerrarPin(); entrar(persona); }
+      else { $("pinMsg").textContent="PIN incorrecto."; pin1.value=""; pin1.focus(); }
+    }
+  };
+  $("pinOk").addEventListener("click", done);
+  $("pinCancel").addEventListener("click", cerrarPin);
+  w.addEventListener("keydown", ev=>{ if(ev.key==="Enter"){ ev.preventDefault(); done(); } });
+}
 function entrar(persona){
   state.uid=persona.email; state.email=persona.email; state.nombre=persona.nombre;
   try{ localStorage.setItem("csi:persona", JSON.stringify({nombre:persona.nombre, email:persona.email})); }catch(e){}
@@ -521,6 +606,11 @@ function renderPlano(){
   $("zonas").classList.toggle("locked", bloqueado);
   let ocupados=0;
   const seatHTML=(s)=>{
+    if(esBloqueado(s.id)){
+      const refb=`OFIC. ${s.sala} · puesto ${s.label}`;
+      return `<button class="seat block" data-seat="${s.id}" data-block="1" aria-disabled="true" tabindex="-1" title="${refb} · No disponible" aria-label="${refb} · No disponible">
+        <span class="id">${s.label}</span><span class="tag">No disp.</span></button>`;
+    }
     const r=state.reservas[`${s.id}__${state.bloque}`];
     let cls="libre", who="", tag="Libre", dis="";
     if(r){ ocupados++;
@@ -539,8 +629,8 @@ function renderPlano(){
     return `<div class="sala"><div class="sala-lbl">${s.nombre}</div><div class="pods">${pods}</div></div>`;
   }).join("");
   $("zonas").innerHTML=`<div class="planta">${planta}</div>`;
-  const total=ASIENTOS.length, libres=total-ocupados;
-  $("occ").innerHTML=`<b>${libres}</b> libres de <b>${total}</b> · ${bloque(state.bloque).label}`;
+  const usables=ASIENTOS.filter(a=>!esBloqueado(a.id)).length, libres=usables-ocupados;
+  $("occ").innerHTML=`<b>${libres}</b> libres de <b>${usables}</b> · ${bloque(state.bloque).label}`;
   const banner=$("banner");
   if(bloqueado){ banner.className="banner lock show";
     banner.textContent=`Estás en ${modal(modalAhora).label.toLowerCase()} en ${bloque(state.bloque).label.toLowerCase()}: no se reserva asiento. Cambiá a “Oficina” para elegir silla.`; }
@@ -587,16 +677,17 @@ async function setModalidad(mod){
   toast(mod==="oficina" ? "Modalidad: Oficina. Tocá tu silla." : `Marcado: ${modal(mod).label}.`);
 }
 async function cancelar(seatId){
-  let n=0;
+  let n=0, multa=false;
   for(const bid of bloquesActivos()){
     if(miAsiento(bid)!==seatId) continue;
-    if(!sePuedeCancelar(state.fecha,bid)){ toast(`Solo se cancela hasta ${CONFIG.cancelarAntesHoras} h antes.`); continue; }
+    if(!sePuedeCancelar(state.fecha,bid)) multa=true;
     try{ await Store.cancelar(`${state.fecha}__${seatId}__${bid}`); n++; }catch(e){ toast("No se pudo cancelar."); }
   }
-  if(n) toast(`Cancelado ${seatId}.`);
+  if(n) toast(multa ? `Cancelado ${seatId}. Cancelaste con menos de 4 h → bizcochos 🥐` : `Cancelado ${seatId}.`);
 }
 async function confirmarReserva(){
   if(!listo()) return; const seatId=state.pending; if(!seatId) return;
+  if(esBloqueado(seatId)){ toast("Ese puesto no está disponible."); clearPending(); renderPlano(); return; }
   const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let ok=0, ocup=0;
   for(const dia of dias){ for(const bid of turnos){
     if(dia===state.fecha){ const prev=miAsiento(bid); if(prev && prev!==seatId){ try{ await Store.cancelar(`${dia}__${prev}__${bid}`); }catch(e){} } }
@@ -612,7 +703,7 @@ async function confirmarReserva(){
 $("logout").addEventListener("click", salir);
 $("buscar").addEventListener("input", e=>renderPicker(e.target.value));
 $("listaNombres").addEventListener("click", e=>{ const b=e.target.closest(".pbtn"); if(!b) return;
-  const per=PERSONAS.find(p=>p.email===b.dataset.email); if(per) entrar(per); });
+  const per=PERSONAS.find(p=>p.email===b.dataset.email); if(per) elegirPersona(per); });
 $("strip").addEventListener("click",e=>{ const b=e.target.closest(".day"); if(!b) return;
   state.fecha=b.dataset.fecha; clearPending(); renderStrip(); subscribe(); renderAll(); });
 $("turnos").addEventListener("click",e=>{ const b=e.target.closest(".turno"); if(!b) return;
@@ -621,10 +712,15 @@ $("modalidad").addEventListener("click",e=>{ const b=e.target.closest("button");
 $("ambos").addEventListener("change",e=>{ state.ambos=e.target.checked; renderModalidad(); renderConfirm(); });
 $("zonas").addEventListener("click",e=>{
   const b=e.target.closest(".seat"); if(!b) return; const seatId=b.dataset.seat;
+  if(b.dataset.block){ toast("Ese puesto no está disponible."); return; }
   if(miModalidad(state.bloque)!=="oficina"){ toast("Cambiá la modalidad a “Oficina” para reservar."); return; }
   const r=state.reservas[`${seatId}__${state.bloque}`];
   if(r){
-    if(r.ownerUid===state.uid){ if(confirm(`¿Cancelar tu reserva de ${seatId}${state.ambos?" (mañana y tarde)":` (${bloque(state.bloque).label})`}?`)) cancelar(seatId); }
+    if(r.ownerUid===state.uid){
+      const tarde=bloquesActivos().some(bid=> miAsiento(bid)===seatId && !sePuedeCancelar(state.fecha,bid));
+      const aviso=tarde ? "\n\n⚠️ Estás cancelando con menos de 4 h de antelación: te toca traer bizcochos 🥐." : "";
+      if(confirm(`¿Cancelar tu reserva de ${seatId}${state.ambos?" (mañana y tarde)":` (${bloque(state.bloque).label})`}?${aviso}`)) cancelar(seatId);
+    }
     else { toast(`${seatId} ya está reservado por ${r.nombre}.`); }
     return;
   }
@@ -645,5 +741,4 @@ $("confirmBar").addEventListener("click",e=>{
 initApp();
 </script>
 </body>
-  <!-- Actualizacion automatica -->
 </html>
