@@ -224,7 +224,6 @@
       <div class="modal-wrap">
         <label class="fld" id="modalLbl">Modalidad de este turno</label>
         <div id="modalidad" class="seg" role="group" aria-label="Modalidad"></div>
-        <label class="ambos"><input type="checkbox" id="ambos" /> Aplicar a mañana y tarde a la vez</label>
       </div>
       <div id="jornada" class="jornada"></div>
       <div id="banner" class="banner" role="status"></div>
@@ -248,7 +247,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v1.1</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v1.2</b>
   </footer>
 </div>
 
@@ -307,7 +306,6 @@ const PERSONAS = [
   { nombre:"María Frachia",           email:"mfrachia@csi-ing.com" },
   { nombre:"María Mesa",              email:"mmesa@csi-ing.com" },
   { nombre:"Mariano Artegoytia",      email:"martegoytia@csi-ing.com" },
-  { nombre:"Martín Sanguinetti",      email:"msanguinetti@csi-ing.com" },
   { nombre:"Matías Bardesio",         email:"mbardesio@csi-ing.com" },
   { nombre:"Matías Castro",           email:"mcastro@csi-ing.com" },
   { nombre:"Matías Gutiérrez",        email:"mgutierrez@csi-ing.com" },
@@ -595,8 +593,10 @@ function renderStrip(){
   }).join("");
 }
 function renderTurnos(){
-  $("turnos").innerHTML = CONFIG.bloques.map(b=>`
-    <button class="turno" data-b="${b.id}" aria-pressed="${b.id===state.bloque}">${b.label}<small>${b.horario}</small></button>`).join("");
+  const simples = CONFIG.bloques.map(b=>`
+    <button class="turno" data-b="${b.id}" aria-pressed="${!state.ambos && b.id===state.bloque}">${b.label}<small>${b.horario}</small></button>`).join("");
+  const full = `<button class="turno" data-b="FULL" aria-pressed="${state.ambos}">Jornada completa<small>Mañana + Tarde</small></button>`;
+  $("turnos").innerHTML = simples + full;
 }
 function renderModalidad(){
   const actual=miModalidad(state.bloque);
@@ -710,9 +710,10 @@ $("listaNombres").addEventListener("click", e=>{ const b=e.target.closest(".pbtn
 $("strip").addEventListener("click",e=>{ const b=e.target.closest(".day"); if(!b) return;
   state.fecha=b.dataset.fecha; clearPending(); renderStrip(); subscribe(); renderAll(); });
 $("turnos").addEventListener("click",e=>{ const b=e.target.closest(".turno"); if(!b) return;
-  state.bloque=b.dataset.b; clearPending(); renderTurnos(); renderModalidad(); renderPlano(); });
+  if(b.dataset.b==="FULL"){ state.ambos=true; }
+  else { state.ambos=false; state.bloque=b.dataset.b; }
+  clearPending(); renderTurnos(); renderModalidad(); renderPlano(); });
 $("modalidad").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; clearPending(); setModalidad(b.dataset.m); });
-$("ambos").addEventListener("change",e=>{ state.ambos=e.target.checked; renderModalidad(); renderConfirm(); });
 $("zonas").addEventListener("click",e=>{
   const b=e.target.closest(".seat"); if(!b) return; const seatId=b.dataset.seat;
   if(b.dataset.block){ toast("Ese puesto no está disponible."); return; }
