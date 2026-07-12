@@ -130,8 +130,11 @@
   .plano-title{font-family:"Archivo"; text-transform:uppercase; letter-spacing:.06em; font-size:.95rem}
   .hint{font-size:.82rem; color:var(--muted); margin-top:6px}
   .occ{font-size:.85rem; color:var(--muted)} .occ b{color:var(--ink); font-family:"Archivo"}
-  .zonas{margin-top:14px; transition:opacity .15s}
+  .zonas{margin-top:8px; transition:opacity .15s}
   .zonas.locked{opacity:.45; pointer-events:none; filter:saturate(.6)}
+  .ventana{margin-top:14px; display:flex; align-items:center; gap:10px; font-size:.72rem; text-transform:uppercase; letter-spacing:.12em; font-family:"Archivo"; font-weight:700}
+  .ventana::before,.ventana::after{content:""; flex:1; height:0; border-top:3px double #9cc0e6}
+  .ventana span{display:inline-flex; align-items:center; gap:7px; padding:5px 14px; background:#eaf2fb; border:1.5px solid #bcd6f0; border-radius:20px; color:#2f6db0}
   .planta{display:grid; grid-template-columns:1fr 1fr; gap:16px}
   .sala{border:1.5px solid var(--line); border-radius:12px; padding:14px; background:#fcfdfe}
   .sala-lbl{font-family:"Archivo"; text-align:center; text-transform:uppercase; letter-spacing:.1em; font-size:.78rem; color:var(--muted); margin-bottom:12px}
@@ -167,6 +170,30 @@
   .chip.mine{background:var(--mine-bg); border-color:var(--mine-bd)}
   .chip.block{background:#eceff3; border-color:#cfd6df; background-image:repeating-linear-gradient(45deg, transparent 0 3px, rgba(148,163,184,.30) 3px 6px)}
 
+  .panel-cols{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:14px}
+  @media(max-width:680px){ .panel-cols{grid-template-columns:1fr} }
+  .pcol{border:1.5px solid var(--line); border-radius:12px; padding:12px 13px; background:#fcfdfe}
+  .pcol h4{font-family:"Archivo"; font-size:.8rem; text-transform:uppercase; letter-spacing:.05em; margin:0 0 9px; display:flex; align-items:center; gap:8px; color:var(--ink)}
+  .pdot{width:10px; height:10px; border-radius:50%; flex:0 0 auto}
+  .pdot.of{background:#15843b} .pdot.te{background:#8a93a1} .pdot.ca{background:#d98b1f}
+  .pcount{margin-left:auto; background:var(--paper); border:1px solid var(--line); border-radius:20px; padding:0 8px; font-size:.72rem; font-weight:700; font-family:"Archivo"; color:var(--muted)}
+  .pcol ul{list-style:none; margin:0; padding:0}
+  .pcol li{display:flex; justify-content:space-between; gap:8px; font-size:.86rem; padding:4px 0; border-top:1px solid #eef1f5}
+  .pcol li:first-child{border-top:0}
+  .pcol li .seat-n{color:var(--muted); font-family:"Archivo"; font-size:.78rem; font-weight:700}
+  .pcol .empty{color:var(--muted); font-size:.82rem; font-style:italic; padding:2px 0}
+
+  .biz-list{margin-top:12px; display:flex; flex-direction:column; gap:8px}
+  .biz-empty{color:var(--muted); font-size:.9rem; padding:4px 0}
+  .biz-row{display:flex; align-items:center; gap:10px; justify-content:space-between; padding:10px 12px; border:1.5px solid #f3d2d2; background:#fff8f8; border-radius:11px}
+  .biz-info{display:flex; flex-direction:column; gap:2px; min-width:0}
+  .biz-name{font-weight:700; font-family:"Archivo"}
+  .biz-meta{font-size:.76rem; color:var(--muted)}
+  .biz-actions{margin-top:10px}
+  .biz-actions:empty{margin-top:0}
+  .pinselect, .pininput.mot{width:100%; max-width:none; text-align:left; letter-spacing:normal; font-size:1rem; font-weight:500; padding:11px 12px; margin-bottom:6px; border:1.5px solid var(--line); border-radius:10px; background:#fff; color:var(--ink)}
+  .pinselect:focus, .pininput.mot:focus{outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(200,16,46,.15)}
+
   .btn{font:inherit; font-weight:700; cursor:pointer; border-radius:10px; padding:11px 18px; border:1.5px solid var(--brand-d); background:var(--brand); color:#fff}
   .btn.ghost{background:#fff; color:var(--ink); border-color:var(--line)}
   .btn.tiny{padding:6px 12px; font-size:.82rem}
@@ -196,7 +223,7 @@
       <span><span class="brandname">CSI</span><span class="brandtag">GTLyT</span></span>
     </div>
     <h1>Reservá tu asiento</h1>
-    <p class="sub">Elegí el día y el turno, y tocá una silla libre. Gris es libre, rojo está reservado y verde es tu lugar. Podés cancelar sin costo hasta 4&nbsp;h antes del turno; si cancelás más tarde, te toca traer bizcochos 🥐.</p>
+    <p class="sub">Elegí el día y el turno, y tocá una silla libre. Gris es libre, rojo está reservado y verde es tu lugar. Podés cancelar hasta 4&nbsp;h antes del turno; si cancelás más tarde o no cumplís la reserva, te toca traer bizcochos 🥐.</p>
     <div id="userbar" class="userbar" hidden>Entraste como <b id="userEmail"></b><button id="logout" class="btn ghost tiny">No soy yo / Salir</button></div>
   </header>
 
@@ -235,8 +262,9 @@
         <span class="occ" id="occ"></span>
       </div>
       <div class="hint" id="hint">Tocá una silla gris para elegirla; después confirmás abajo.</div>
+      <div class="ventana"><span>🪟 Ventana</span></div>
       <div id="zonas" class="zonas"></div>
-      <div class="entrada"><span class="door">▣ Acceso · puertas entre OFIC. 113 y 112</span></div>
+      <div class="entrada"><span class="door">🚪 Puerta · acceso entre OFIC. 113 y 112</span></div>
       <div class="legend">
         <span><i class="chip libre"></i> Libre</span>
         <span><i class="chip ocup"></i> Reservado</span>
@@ -244,16 +272,35 @@
         <span><i class="chip block"></i> No disponible</span>
       </div>
     </section>
+
+    <section class="card" id="panelCard">
+      <div class="plano-head">
+        <span class="plano-title">¿Quién está dónde?</span>
+        <span class="occ" id="panelSub"></span>
+      </div>
+      <div id="panel" class="panel-cols"></div>
+    </section>
+
+    <section class="card" id="bizcochosCard">
+      <div class="plano-head">
+        <span class="plano-title">🥐 Deben bizcochos</span>
+        <span class="occ" id="bizCount"></span>
+      </div>
+      <div class="hint" id="bizHint" hidden>Se anota solo cuando alguien cancela con menos de 4&nbsp;h. Tocá “Ya trajo” cuando cumpla.</div>
+      <div id="bizActions" class="biz-actions"></div>
+      <div id="bizList" class="biz-list"></div>
+    </section>
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v1.2</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v1.9</b>
   </footer>
 </div>
 
 <div id="confirmBar" class="confirmbar"><div class="inner"></div></div>
 <div id="toast" class="toast"></div>
 <div id="pinWrap" class="pinwrap" hidden></div>
+<div id="bizWrap" class="pinwrap" hidden></div>
 
 <script>
 /* ════════════════════════════════════════════════════════════════════════
@@ -306,7 +353,6 @@ const PERSONAS = [
   { nombre:"María Frachia",           email:"mfrachia@csi-ing.com" },
   { nombre:"María Mesa",              email:"mmesa@csi-ing.com" },
   { nombre:"Mariano Artegoytia",      email:"martegoytia@csi-ing.com" },
-  { nombre:"Martín Sanguinetti",      email:"msanguinetti@csi-ing.com" },
   { nombre:"Matías Bardesio",         email:"mbardesio@csi-ing.com" },
   { nombre:"Matías Castro",           email:"mcastro@csi-ing.com" },
   { nombre:"Matías Gutiérrez",        email:"mgutierrez@csi-ing.com" },
@@ -324,6 +370,14 @@ const PERSONAS = [
   { nombre:"Valentina Oliva",         email:"voliva@csi-ing.com" },
   { nombre:"Valentina Varela",        email:"vvarela@csi-ing.com" },
 ];
+
+/* ════════════════════════════════════════════════════════════════════════
+   🔑 ADMINISTRADORES  ·  quiénes pueden anotar/borrar deudas de bizcochos
+   Poné acá los mails de quienes administran (ej. Rocío). Para sumar a alguien,
+   agregá su mail entre comillas separado por coma.
+   ════════════════════════════════════════════════════════════════════════ */
+const ADMINS = ["rrojasr@csi-ing.com"];
+const soyAdmin = ()=> ADMINS.includes(state.uid);
 
 /* ════════════════════════════════════════════════════════════════════════
    2) AJUSTES DE LA OFICINA
@@ -371,7 +425,7 @@ function niceName(email){ const lp=(email||"").split("@")[0];
 const state = {
   uid:null, email:"", nombre:"", mode:"local", authError:null, _demoExtra:"",
   fecha:null, bloque:CONFIG.bloques[0].id, ambos:false,
-  reservas:{}, asistencia:{}, pending:null, diasSel:new Set(),
+  reservas:{}, asistencia:{}, bizcochos:[], pending:null, pendingMod:null, diasSel:new Set(),
 };
 const bloquesActivos=()=> state.ambos ? CONFIG.bloques.map(b=>b.id) : [state.bloque];
 
@@ -387,7 +441,7 @@ function diasDisponibles(){
 }
 const inicioTurno=(fecha,bid)=> new Date(`${fecha}T${bloque(bid).inicio}:00${CONFIG.tz}`);
 const sePuedeCancelar=(fecha,bid)=> (inicioTurno(fecha,bid).getTime()-Date.now()) >= CONFIG.cancelarAntesHoras*3600*1000;
-const miModalidad=(bid)=> state.asistencia[`${bid}__${state.uid}`] || "oficina";
+const miModalidad=(bid)=>{ const a=state.asistencia[`${bid}__${state.uid}`]; return a? a.modalidad : "oficina"; };
 function miAsiento(bid){
   const e=Object.entries(state.reservas).find(([k,r])=> k.endsWith(`__${bid}`) && r.ownerUid===state.uid);
   return e ? e[0].split("__")[0] : null;
@@ -397,39 +451,47 @@ function miAsiento(bid){
 let Store=null, AU=null, AUTH=null, GPROVIDER=null;
 
 const LocalStore = {
-  KR:"csi:reservas", KA:"csi:asistencia", KU:"csi:usuarios", res:{}, asist:{}, usuarios:{}, _cb:null, _fecha:null,
+  KR:"csi:reservas", KA:"csi:asistencia", KU:"csi:usuarios", KB:"csi:bizcochos", res:{}, asist:{}, usuarios:{}, bizcochos:{}, _cb:null, _bizCb:null, _fecha:null,
   init(){ try{this.res=JSON.parse(localStorage.getItem(this.KR)||"{}")}catch(e){this.res={}}
           try{this.asist=JSON.parse(localStorage.getItem(this.KA)||"{}")}catch(e){this.asist={}}
-          try{this.usuarios=JSON.parse(localStorage.getItem(this.KU)||"{}")}catch(e){this.usuarios={}} return this; },
+          try{this.usuarios=JSON.parse(localStorage.getItem(this.KU)||"{}")}catch(e){this.usuarios={}}
+          try{this.bizcochos=JSON.parse(localStorage.getItem(this.KB)||"{}")}catch(e){this.bizcochos={}} return this; },
   _persist(){ try{localStorage.setItem(this.KR,JSON.stringify(this.res)); localStorage.setItem(this.KA,JSON.stringify(this.asist));}catch(e){} },
   _persistU(){ try{localStorage.setItem(this.KU,JSON.stringify(this.usuarios));}catch(e){} },
+  _persistB(){ try{localStorage.setItem(this.KB,JSON.stringify(this.bizcochos));}catch(e){} },
   onData(fecha,cb){ this._fecha=fecha; this._cb=cb; this._emit(); },
   _emit(){ if(!this._cb) return; const reservas={}, asistencia={};
     for(const r of Object.values(this.res)) if(r.fecha===this._fecha) reservas[`${r.asiento}__${r.bloque}`]=r;
-    for(const a of Object.values(this.asist)) if(a.fecha===this._fecha) asistencia[`${a.bloque}__${a.ownerUid}`]=a.modalidad;
+    for(const a of Object.values(this.asist)) if(a.fecha===this._fecha) asistencia[`${a.bloque}__${a.ownerUid}`]=a;
     this._cb({reservas,asistencia}); },
+  onBizcochos(cb){ this._bizCb=cb; this._emitBiz(); },
+  _emitBiz(){ if(this._bizCb) this._bizCb(Object.values(this.bizcochos)); },
   async reservar(id,data){ if(this.res[id]) throw new Error("OCUPADO"); this.res[id]=data; this._persist(); this._emit(); },
   async cancelar(id){ delete this.res[id]; this._persist(); this._emit(); },
   async setAsist(id,data){ this.asist[id]=data; this._persist(); this._emit(); },
   async delAsist(id){ delete this.asist[id]; this._persist(); this._emit(); },
   async getUsuario(email){ return this.usuarios[email]||null; },
   async setUsuario(email,data){ this.usuarios[email]=data; this._persistU(); },
+  async addBizcocho(id,data){ this.bizcochos[id]=data; this._persistB(); this._emitBiz(); },
+  async delBizcocho(id){ delete this.bizcochos[id]; this._persistB(); this._emitBiz(); },
 };
 LocalStore.init();
-window.addEventListener("storage",()=>{ if(Store===LocalStore){ LocalStore.init(); LocalStore._emit(); }});
+window.addEventListener("storage",()=>{ if(Store===LocalStore){ LocalStore.init(); LocalStore._emit(); LocalStore._emitBiz(); }});
 
 function makeFirebaseStore(fs, db){
   const { collection, doc, onSnapshot, query, where, runTransaction, deleteDoc, setDoc, getDoc } = fs;
-  let unsubR=null, unsubA=null, reservas={}, asistencia={};
+  let unsubR=null, unsubA=null, unsubB=null, reservas={}, asistencia={};
+  const onErr=(e)=>{ console.error(e); if(e&&e.code==="permission-denied") toast("Permiso denegado: revisá las reglas de Firestore."); };
   return {
     onData(fecha,cb){
       unsubR&&unsubR(); unsubA&&unsubA(); reservas={}; asistencia={};
-      const onErr=(e)=>{ console.error(e); if(e&&e.code==="permission-denied") toast("Permiso denegado: revisá las reglas de Firestore."); };
       unsubR=onSnapshot(query(collection(db,"reservas"),where("fecha","==",fecha)),snap=>{
         reservas={}; snap.forEach(d=>{const r=d.data(); reservas[`${r.asiento}__${r.bloque}`]=r;}); cb({reservas,asistencia}); }, onErr);
       unsubA=onSnapshot(query(collection(db,"asistencia"),where("fecha","==",fecha)),snap=>{
-        asistencia={}; snap.forEach(d=>{const a=d.data(); asistencia[`${a.bloque}__${a.ownerUid}`]=a.modalidad;}); cb({reservas,asistencia}); }, onErr);
+        asistencia={}; snap.forEach(d=>{const a=d.data(); asistencia[`${a.bloque}__${a.ownerUid}`]=a;}); cb({reservas,asistencia}); }, onErr);
     },
+    onBizcochos(cb){ unsubB&&unsubB();
+      unsubB=onSnapshot(collection(db,"bizcochos"),snap=>{ const list=[]; snap.forEach(d=>list.push(d.data())); cb(list); }, onErr); },
     async reservar(id,data){ await runTransaction(db, async (tx)=>{ const ref=doc(db,"reservas",id);
       const c=await tx.get(ref); if(c.exists()) throw new Error("OCUPADO"); tx.set(ref,data); }); },
     async cancelar(id){ await deleteDoc(doc(db,"reservas",id)); },
@@ -437,11 +499,13 @@ function makeFirebaseStore(fs, db){
     async delAsist(id){ await deleteDoc(doc(db,"asistencia",id)); },
     async getUsuario(email){ const s=await getDoc(doc(db,"usuarios",email)); return s.exists()? s.data() : null; },
     async setUsuario(email,data){ await setDoc(doc(db,"usuarios",email),data); },
+    async addBizcocho(id,data){ await setDoc(doc(db,"bizcochos",id),data); },
+    async delBizcocho(id){ await deleteDoc(doc(db,"bizcochos",id)); },
   };
 }
 function subscribe(){ Store.onData(state.fecha, (data)=>{
   state.reservas=data.reservas; state.asistencia=data.asistencia;
-  renderModalidad(); renderPlano(); renderJornada();
+  renderModalidad(); renderPlano(); renderJornada(); renderPanel();
 }); }
 
 /* ════════ INGRESO POR LISTA DE NOMBRES ════════ */
@@ -571,7 +635,7 @@ function salir(){
 function mostrarApp(){
   $("picker").hidden=true; $("appwrap").hidden=false;
   $("userbar").hidden=false; $("userEmail").textContent=state.nombre||state.email||"";
-  renderModeNote(); renderAll(); subscribe();
+  renderModeNote(); renderAll(); subscribe(); subscribeBizcochos();
 }
 function setLoginMsg(t,cls){ const m=$("loginMsg"); if(!m) return; m.textContent=t; m.className="msg"+(cls?" "+cls:""); }
 
@@ -600,13 +664,13 @@ function renderTurnos(){
   $("turnos").innerHTML = simples + full;
 }
 function renderModalidad(){
-  const actual=miModalidad(state.bloque);
+  const actual=(state.pendingMod || miModalidad(state.bloque));
   $("modalLbl").textContent = state.ambos ? "Modalidad (mañana y tarde)" : `Modalidad · ${bloque(state.bloque).label}`;
   $("modalidad").innerHTML = CONFIG.modalidades.map(m=>`
     <button data-m="${m.id}" aria-pressed="${m.id===actual}"><span class="dot" style="background:${m.color}"></span>${m.label}</button>`).join("");
 }
 function renderPlano(){
-  const me=state.uid, modalAhora=miModalidad(state.bloque), bloqueado=modalAhora!=="oficina";
+  const me=state.uid, modalAhora=(state.pendingMod || miModalidad(state.bloque)), bloqueado=modalAhora!=="oficina";
   $("zonas").classList.toggle("locked", bloqueado);
   let ocupados=0;
   const seatHTML=(s)=>{
@@ -648,24 +712,105 @@ function renderJornada(){
     return `${b.label}: <b>${txt}</b>`; });
   $("jornada").innerHTML=`Tu jornada — ${partes.join(" · ")}`;
 }
+function renderPanel(){
+  const cont=$("panel"); if(!cont) return;
+  if(!state.uid){ cont.innerHTML=""; $("panelSub").textContent=""; return; }
+  const bid=state.bloque, ordena=(a,b)=>a.nombre.localeCompare(b.nombre,"es");
+  const oficina=Object.values(state.reservas).filter(r=>r.bloque===bid && !state.asistencia[`${bid}__${r.ownerUid}`])
+    .map(r=>({nombre:r.nombre, seat:r.asiento})).sort(ordena);
+  const asis=Object.values(state.asistencia).filter(a=>a && a.bloque===bid);
+  const tele=asis.filter(a=>a.modalidad==="teletrabajo").map(a=>({nombre:a.nombre})).sort(ordena);
+  const campo=asis.filter(a=>a.modalidad==="campo").map(a=>({nombre:a.nombre})).sort(ordena);
+  const col=(dot,titulo,items,li)=>`
+    <div class="pcol">
+      <h4><span class="pdot ${dot}"></span>${titulo}<span class="pcount">${items.length}</span></h4>
+      ${items.length ? `<ul>${items.map(li).join("")}</ul>` : `<div class="empty">Nadie por ahora</div>`}
+    </div>`;
+  cont.innerHTML =
+    col("of","En oficina", oficina, x=>`<li><span>${x.nombre}</span><span class="seat-n">${x.seat}</span></li>`) +
+    col("te","Teletrabajo", tele, x=>`<li><span>${x.nombre}</span></li>`) +
+    col("ca","Campo", campo, x=>`<li><span>${x.nombre}</span></li>`);
+  const d=new Date(state.fecha+"T00:00:00");
+  $("panelSub").textContent=`${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]} · ${bloque(bid).label}`;
+}
+function subscribeBizcochos(){ if(!Store || !Store.onBizcochos) return; Store.onBizcochos((list)=>{ state.bizcochos=list||[]; renderBizcochos(); }); }
+function renderBizcochos(){
+  const cont=$("bizList"), cnt=$("bizCount"), acc=$("bizActions"); if(!cont) return;
+  const admin=soyAdmin();
+  if(acc) acc.innerHTML = admin ? `<button id="btnAnotar" class="btn ghost tiny">➕ Anotar a alguien</button>` : "";
+  const bh=$("bizHint"); if(bh) bh.hidden = !admin;
+  const list=(state.bizcochos||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
+  if(cnt) cnt.textContent = list.length ? `${list.length} pendiente${list.length>1?"s":""}` : "";
+  if(!list.length){ cont.innerHTML=`<div class="biz-empty">Nadie debe bizcochos por ahora 🎉</div>`; return; }
+  cont.innerHTML = list.map(b=>{
+    const d=new Date((b.fecha||"")+"T00:00:00");
+    const cuando=isNaN(d.getTime())?"":`${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
+    const blab=bloque(b.bloque)?bloque(b.bloque).label:"";
+    const meta=[cuando,blab,b.motivo||"canceló tarde"].filter(Boolean).join(" · ");
+    const id=b.id || `${b.fecha}__${b.bloque}__${b.ownerUid}`;
+    const btn=admin?`<button class="btn ghost tiny" data-biz="${id}">Ya trajo ✓</button>`:"";
+    return `<div class="biz-row">
+      <div class="biz-info"><span class="biz-name">🥐 ${b.nombre}</span>
+        <span class="biz-meta">${meta}</span></div>${btn}</div>`;
+  }).join("");
+}
+function abrirAnotar(){
+  if(!soyAdmin()) return;
+  const opts=PERSONAS.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre,"es"))
+    .map(p=>`<option value="${p.email}">${p.nombre}</option>`).join("");
+  const d=new Date(state.fecha+"T00:00:00"); const dl=`${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
+  const w=$("bizWrap");
+  w.innerHTML=`
+    <div class="pincard">
+      <div class="pintitle">Anotar deuda 🥐</div>
+      <p class="pinsub">Se suma a la lista para el <b>${dl}</b>.</p>
+      <label class="fld">Persona</label>
+      <select id="anPersona" class="pinselect">${opts}</select>
+      <label class="fld">Motivo</label>
+      <input id="anMotivo" class="pininput mot" type="text" value="no vino" maxlength="40" autocomplete="off" />
+      <div id="anMsg" class="pinmsg"></div>
+      <div class="pinactions">
+        <button id="anCancel" class="btn ghost">Cancelar</button>
+        <button id="anOk" class="btn">Anotar</button>
+      </div>
+    </div>`;
+  w.hidden=false;
+  $("anCancel").addEventListener("click", cerrarAnotar);
+  $("anOk").addEventListener("click", confirmarAnotar);
+}
+function cerrarAnotar(){ const w=$("bizWrap"); w.hidden=true; w.innerHTML=""; }
+async function confirmarAnotar(){
+  if(!soyAdmin()) return;
+  const email=$("anPersona").value; const p=PERSONAS.find(x=>x.email===email);
+  if(!p){ return; }
+  const motivo=($("anMotivo").value||"").trim()||"no vino";
+  const id=`manual__${email}__${Date.now()}`;
+  try{ await Store.addBizcocho(id,{ id, nombre:p.nombre, ownerUid:email, fecha:state.fecha, motivo, ts:Date.now(), manual:true }); }
+  catch(e){ const m=$("anMsg"); if(m) m.textContent="No se pudo anotar. Reintentá."; return; }
+  cerrarAnotar();
+}
 function infoAsiento(id){ const a=ASIENTOS.find(x=>x.id===id); return a?`OFIC. ${a.sala} · puesto ${a.label}`:id; }
-function clearPending(){ state.pending=null; state.diasSel=new Set(); renderConfirm(); }
+function clearPending(){ state.pending=null; state.pendingMod=null; state.diasSel=new Set(); renderConfirm(); }
 function renderConfirm(){
   const bar=$("confirmBar"), inner=bar.querySelector(".inner");
-  document.body.classList.toggle("haspending", !!state.pending);
-  if(!state.pending){ bar.classList.remove("show"); inner.innerHTML=""; return; }
+  const activo = state.pending || state.pendingMod;
+  document.body.classList.toggle("haspending", !!activo);
+  if(!activo){ bar.classList.remove("show"); inner.innerHTML=""; return; }
   const turnos=bloquesActivos().map(b=>bloque(b).label).join(" + ");
   const chips=diasDisponibles().map(d=>{ const k=ymd(d), on=state.diasSel.has(k), lock=(k===state.fecha);
     return `<button class="dchip${on?" on":""}" data-d="${k}" ${lock?'data-lock="1"':''}>${DOW[d.getDay()]} ${d.getDate()}</button>`; }).join("");
+  const esMod=!!state.pendingMod;
+  const titulo=esMod?modal(state.pendingMod).label:infoAsiento(state.pending);
+  const btnTxt=esMod?`Confirmar ${modal(state.pendingMod).label.toLowerCase()}`:"Confirmar reserva";
   inner.innerHTML=`
-    <div class="cb-top">Elegiste <b>${infoAsiento(state.pending)}</b> · <b>${turnos}</b></div>
+    <div class="cb-top">Elegiste <b>${titulo}</b> · <b>${turnos}</b></div>
     <div class="cb-sub">¿En qué días? (tocá para sumar o quitar — el día actual queda fijo)</div>
     <div class="dchips">${chips}</div>
-    <div class="cb-actions"><button id="btnConfirmar" class="btn">Confirmar reserva</button>
+    <div class="cb-actions"><button id="btnConfirmar" class="btn">${btnTxt}</button>
       <button id="btnDescartar" class="btn ghost">Descartar</button></div>`;
   bar.classList.add("show");
 }
-function renderAll(){ renderStrip(); renderTurnos(); renderModalidad(); renderPlano(); renderJornada(); renderConfirm(); }
+function renderAll(){ renderStrip(); renderTurnos(); renderModalidad(); renderPlano(); renderJornada(); renderConfirm(); renderPanel(); }
 
 /* ════════ ACCIONES ════════ */
 function listo(){ if(!state.uid){ mostrarPicker(); toast("Elegí tu nombre para reservar."); return false; } return true; }
@@ -684,8 +829,11 @@ async function cancelar(seatId){
   let n=0, multa=false;
   for(const bid of bloquesActivos()){
     if(miAsiento(bid)!==seatId) continue;
-    if(!sePuedeCancelar(state.fecha,bid)) multa=true;
-    try{ await Store.cancelar(`${state.fecha}__${seatId}__${bid}`); n++; }catch(e){ toast("No se pudo cancelar."); }
+    const tarde = !sePuedeCancelar(state.fecha,bid); if(tarde) multa=true;
+    try{ await Store.cancelar(`${state.fecha}__${seatId}__${bid}`); n++;
+      if(tarde){ const bzid=`${state.fecha}__${bid}__${state.uid}`; try{ await Store.addBizcocho(bzid,
+        { id:bzid, nombre:state.nombre, ownerUid:state.uid, fecha:state.fecha, bloque:bid, motivo:"canceló tarde", ts:Date.now() }); }catch(e){} }
+    }catch(e){ toast("No se pudo cancelar."); }
   }
   if(n) toast(multa ? `Cancelado ${seatId}. Cancelaste con menos de 4 h → bizcochos 🥐` : `Cancelado ${seatId}.`);
 }
@@ -702,6 +850,22 @@ async function confirmarReserva(){
   clearPending(); renderPlano(); renderJornada();
   toast(ok ? `Reservado ${seatId} en ${ok} bloque(s)${ocup?` · ${ocup} ya ocupado(s)`:""}.` : "Ese puesto ya estaba ocupado.");
 }
+function iniciarModalidad(mod){
+  if(!listo()) return;
+  state.pending=null; state.pendingMod=mod; state.diasSel=new Set([state.fecha]);
+  renderModalidad(); renderPlano(); renderConfirm();
+  toast(`${modal(mod).label}: elegí los días y confirmá abajo.`);
+}
+async function confirmarModalidad(){
+  if(!listo()) return; const mod=state.pendingMod; if(!mod) return;
+  const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let ok=0;
+  for(const dia of dias){ for(const bid of turnos){
+    if(dia===state.fecha){ const prev=miAsiento(bid); if(prev){ try{ await Store.cancelar(`${dia}__${prev}__${bid}`); }catch(e){} } }
+    try{ await Store.setAsist(`${dia}__${bid}__${me}`,{ fecha:dia, bloque:bid, nombre:state.nombre, ownerUid:me, modalidad:mod }); ok++; }catch(e){}
+  }}
+  clearPending(); renderModalidad(); renderPlano(); renderJornada(); renderPanel();
+  toast(ok ? `Listo: ${modal(mod).label} confirmado en ${dias.length} día(s).` : "No se pudo guardar.");
+}
 
 /* ════════ EVENTOS ════════ */
 $("logout").addEventListener("click", salir);
@@ -713,8 +877,15 @@ $("strip").addEventListener("click",e=>{ const b=e.target.closest(".day"); if(!b
 $("turnos").addEventListener("click",e=>{ const b=e.target.closest(".turno"); if(!b) return;
   if(b.dataset.b==="FULL"){ state.ambos=true; }
   else { state.ambos=false; state.bloque=b.dataset.b; }
-  clearPending(); renderTurnos(); renderModalidad(); renderPlano(); });
-$("modalidad").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; clearPending(); setModalidad(b.dataset.m); });
+  clearPending(); renderTurnos(); renderModalidad(); renderPlano(); renderPanel(); });
+$("modalidad").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+  const m=b.dataset.m;
+  if(m==="oficina"){ clearPending(); setModalidad("oficina"); }
+  else { iniciarModalidad(m); }
+});
+$("bizActions").addEventListener("click",e=>{ if(e.target.closest("#btnAnotar")) abrirAnotar(); });
+$("bizList").addEventListener("click",e=>{ const b=e.target.closest("[data-biz]"); if(!b) return; if(!soyAdmin()) return;
+  if(confirm("¿Marcar que ya trajo los bizcochos? Se quita de la lista.")){ try{ Store.delBizcocho(b.dataset.biz); }catch(err){} } });
 $("zonas").addEventListener("click",e=>{
   const b=e.target.closest(".seat"); if(!b) return; const seatId=b.dataset.seat;
   if(b.dataset.block){ toast("Ese puesto no está disponible."); return; }
@@ -738,8 +909,8 @@ $("confirmBar").addEventListener("click",e=>{
   const chip=e.target.closest(".dchip");
   if(chip){ if(chip.dataset.lock) return; const k=chip.dataset.d;
     state.diasSel.has(k) ? state.diasSel.delete(k) : state.diasSel.add(k); renderConfirm(); return; }
-  if(e.target.closest("#btnConfirmar")){ confirmarReserva(); return; }
-  if(e.target.closest("#btnDescartar")){ clearPending(); renderPlano(); }
+  if(e.target.closest("#btnConfirmar")){ state.pendingMod ? confirmarModalidad() : confirmarReserva(); return; }
+  if(e.target.closest("#btnDescartar")){ clearPending(); renderModalidad(); renderPlano(); }
 });
 
 /* ════════ INIT ════════ */
