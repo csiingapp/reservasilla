@@ -293,7 +293,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v1.9</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v2.2</b>
   </footer>
 </div>
 
@@ -347,13 +347,13 @@ const PERSONAS = [
   { nombre:"José Pedro Vidal",        email:"jpvidal@csi-ing.com" },
   { nombre:"Juan Marote",             email:"jmarote@csi-ing.com" },
   { nombre:"Julieta Rohner",          email:"jrohner@csi-ing.com" },
-  { nombre:"Leandro Vega",            email:"lvega@csi-ing.com" },
   { nombre:"Lucas Padilla Segui",     email:"lpadilla@csi-ing.com" },
   { nombre:"Marcelo Rivero",          email:"mrivero@csi-ing.com" },
   { nombre:"Marco Pérez",             email:"mperezr@csi-ing.com" },
   { nombre:"María Frachia",           email:"mfrachia@csi-ing.com" },
   { nombre:"María Mesa",              email:"mmesa@csi-ing.com" },
   { nombre:"Mariano Artegoytia",      email:"martegoytia@csi-ing.com" },
+  { nombre:"Martín Sanguinetti",      email:"msanguinetti@csi-ing.com" },
   { nombre:"Matías Bardesio",         email:"mbardesio@csi-ing.com" },
   { nombre:"Matías Castro",           email:"mcastro@csi-ing.com" },
   { nombre:"Matías Gutiérrez",        email:"mgutierrez@csi-ing.com" },
@@ -671,7 +671,7 @@ function renderModalidad(){
     <button data-m="${m.id}" aria-pressed="${m.id===actual}"><span class="dot" style="background:${m.color}"></span>${m.label}</button>`).join("");
 }
 function renderPlano(){
-  const me=state.uid, modalAhora=(state.pendingMod || miModalidad(state.bloque)), bloqueado=modalAhora!=="oficina";
+  const me=state.uid, modalAhora=((state.pendingMod && state.pendingMod!=="oficina") ? state.pendingMod : miModalidad(state.bloque)), bloqueado=modalAhora!=="oficina";
   $("zonas").classList.toggle("locked", bloqueado);
   let ocupados=0;
   const seatHTML=(s)=>{
@@ -800,18 +800,19 @@ function renderConfirm(){
   const turnos=bloquesActivos().map(b=>bloque(b).label).join(" + ");
   const chips=diasDisponibles().map(d=>{ const k=ymd(d), on=state.diasSel.has(k), lock=(k===state.fecha);
     return `<button class="dchip${on?" on":""}" data-d="${k}" ${lock?'data-lock="1"':''}>${DOW[d.getDay()]} ${d.getDate()}</button>`; }).join("");
-  const esMod=!!state.pendingMod;
+  const esMod=!!state.pendingMod, esQuitar=state.pendingMod==="oficina";
   const titulo=esMod?modal(state.pendingMod).label:infoAsiento(state.pending);
-  const btnTxt=esMod?`Confirmar ${modal(state.pendingMod).label.toLowerCase()}`:"Confirmar reserva";
+  const btnTxt=esQuitar?"Quitar de estos días":(esMod?`Confirmar ${modal(state.pendingMod).label.toLowerCase()}`:"Confirmar reserva");
+  const top=esQuitar?`Quitar <b>teletrabajo/campo</b> · <b>${turnos}</b>`:`Elegiste <b>${titulo}</b> · <b>${turnos}</b>`;
   inner.innerHTML=`
-    <div class="cb-top">Elegiste <b>${titulo}</b> · <b>${turnos}</b></div>
+    <div class="cb-top">${top}</div>
     <div class="cb-sub">¿En qué días? (tocá para sumar o quitar — el día actual queda fijo)</div>
     <div class="dchips">${chips}</div>
     <div class="cb-actions"><button id="btnConfirmar" class="btn">${btnTxt}</button>
       <button id="btnDescartar" class="btn ghost">Descartar</button></div>`;
   bar.classList.add("show");
 }
-function renderAll(){ renderStrip(); renderTurnos(); renderModalidad(); renderPlano(); renderJornada(); renderConfirm(); renderPanel(); }
+function renderAll(){ renderStrip(); renderTurnos(); renderModalidad(); renderPlano(); renderJornada(); renderConfirm(); renderPanel(); renderBizcochos(); }
 
 /* ════════ ACCIONES ════════ */
 function listo(){ if(!state.uid){ mostrarPicker(); toast("Elegí tu nombre para reservar."); return false; } return true; }
@@ -855,17 +856,22 @@ function iniciarModalidad(mod){
   if(!listo()) return;
   state.pending=null; state.pendingMod=mod; state.diasSel=new Set([state.fecha]);
   renderModalidad(); renderPlano(); renderConfirm();
-  toast(`${modal(mod).label}: elegí los días y confirmá abajo.`);
+  toast(mod==="oficina" ? "Elegí los días a quitar y confirmá abajo." : `${modal(mod).label}: elegí los días y confirmá abajo.`);
 }
 async function confirmarModalidad(){
   if(!listo()) return; const mod=state.pendingMod; if(!mod) return;
   const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let ok=0;
   for(const dia of dias){ for(const bid of turnos){
-    if(dia===state.fecha){ const prev=miAsiento(bid); if(prev){ try{ await Store.cancelar(`${dia}__${prev}__${bid}`); }catch(e){} } }
-    try{ await Store.setAsist(`${dia}__${bid}__${me}`,{ fecha:dia, bloque:bid, nombre:state.nombre, ownerUid:me, modalidad:mod }); ok++; }catch(e){}
+    if(mod==="oficina"){ try{ await Store.delAsist(`${dia}__${bid}__${me}`); ok++; }catch(e){} }
+    else {
+      if(dia===state.fecha){ const prev=miAsiento(bid); if(prev){ try{ await Store.cancelar(`${dia}__${prev}__${bid}`); }catch(e){} } }
+      try{ await Store.setAsist(`${dia}__${bid}__${me}`,{ fecha:dia, bloque:bid, nombre:state.nombre, ownerUid:me, modalidad:mod }); ok++; }catch(e){}
+    }
   }}
   clearPending(); renderModalidad(); renderPlano(); renderJornada(); renderPanel();
-  toast(ok ? `Listo: ${modal(mod).label} confirmado en ${dias.length} día(s).` : "No se pudo guardar.");
+  toast(mod==="oficina"
+    ? `Quitado teletrabajo/campo en ${dias.length} día(s).`
+    : (ok ? `Listo: ${modal(mod).label} confirmado en ${dias.length} día(s).` : "No se pudo guardar."));
 }
 
 /* ════════ EVENTOS ════════ */
@@ -881,8 +887,10 @@ $("turnos").addEventListener("click",e=>{ const b=e.target.closest(".turno"); if
   clearPending(); renderTurnos(); renderModalidad(); renderPlano(); renderPanel(); });
 $("modalidad").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
   const m=b.dataset.m;
-  if(m==="oficina"){ clearPending(); setModalidad("oficina"); }
-  else { iniciarModalidad(m); }
+  if(m==="oficina"){
+    if(miModalidad(state.bloque)!=="oficina"){ iniciarModalidad("oficina"); }   // tiene teletrabajo/campo → permite quitar varios días
+    else { clearPending(); setModalidad("oficina"); }                            // ya está en oficina → inmediato
+  } else { iniciarModalidad(m); }
 });
 $("bizActions").addEventListener("click",e=>{ if(e.target.closest("#btnAnotar")) abrirAnotar(); });
 $("bizList").addEventListener("click",e=>{ const b=e.target.closest("[data-biz]"); if(!b) return; if(!soyAdmin()) return;
