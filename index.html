@@ -293,7 +293,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v2.2</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v2.3</b>
   </footer>
 </div>
 
@@ -359,7 +359,6 @@ const PERSONAS = [
   { nombre:"Matías Gutiérrez",        email:"mgutierrez@csi-ing.com" },
   { nombre:"Mauro Bruzzone",          email:"mbruzzone@csi-ing.com" },
   { nombre:"Maximiliano Rojas Mirazón", email:"mrojasm@csi-ing.com" },
-  { nombre:"Micaela Perdomo",         email:"mperdomo@csi-ing.com" },
   { nombre:"Paula Bonjour",           email:"pbonjour@csi-ing.com" },
   { nombre:"Pilar Betancurt",         email:"pbetancurt@csi-ing.com" },
   { nombre:"Pilar Luján",             email:"plujan@csi-ing.com" },
@@ -426,7 +425,7 @@ function niceName(email){ const lp=(email||"").split("@")[0];
 
 const state = {
   uid:null, email:"", nombre:"", mode:"local", authError:null, _demoExtra:"",
-  fecha:null, bloque:CONFIG.bloques[0].id, ambos:false,
+  fecha:null, bloque:CONFIG.bloques[0].id, ambos:true,
   reservas:{}, asistencia:{}, bizcochos:[], pending:null, pendingMod:null, diasSel:new Set(),
 };
 const bloquesActivos=()=> state.ambos ? CONFIG.bloques.map(b=>b.id) : [state.bloque];
@@ -663,7 +662,7 @@ function renderTurnos(){
   const simples = CONFIG.bloques.map(b=>`
     <button class="turno" data-b="${b.id}" aria-pressed="${!state.ambos && b.id===state.bloque}">${b.label}<small>${b.horario}</small></button>`).join("");
   const full = `<button class="turno" data-b="FULL" aria-pressed="${state.ambos}">Jornada completa<small>Mañana + Tarde</small></button>`;
-  $("turnos").innerHTML = simples + full;
+  $("turnos").innerHTML = full + simples;
 }
 function renderModalidad(){
   const actual=(state.pendingMod || miModalidad(state.bloque));
