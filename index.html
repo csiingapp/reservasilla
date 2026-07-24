@@ -192,6 +192,8 @@
   .biz-name{font-weight:700; font-family:"Archivo"}
   .biz-meta{font-size:.76rem; color:var(--muted)}
   .biz-actions{margin-top:10px}
+  .biz-btns{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end}
+  .hist-just{margin-top:10px; color:var(--muted); font-size:.8rem; background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:8px 11px}
   .biz-actions:empty{margin-top:0}
   .histsel{border:1.5px solid var(--line); border-radius:20px; padding:5px 10px; font:inherit; font-size:.82rem; font-weight:600; background:#fff; color:var(--ink); cursor:pointer}
   .histsel:focus{outline:none; border-color:var(--brand)}
@@ -303,7 +305,7 @@
         <span class="plano-title">🥐 Deben bizcochos</span>
         <span class="occ" id="bizCount"></span>
       </div>
-      <div class="hint" id="bizHint" hidden>Se anota solo cuando alguien cancela con menos de 4&nbsp;h. Tocá “Ya trajo” cuando cumpla.</div>
+      <div class="hint" id="bizHint" hidden>Se anota solo cuando alguien cancela con menos de 4&nbsp;h. Tocá “Ya trajo” cuando cumpla, o “Justificar” si tuvo un imprevisto (no cuenta en el historial).</div>
       <div id="bizActions" class="biz-actions"></div>
       <div id="bizList" class="biz-list"></div>
     </section>
@@ -318,7 +320,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v2.6</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v2.7</b>
   </footer>
 </div>
 
@@ -795,7 +797,7 @@ function renderBizcochos(){
   const admin=soyAdmin();
   if(acc) acc.innerHTML = admin ? `<button id="btnAnotar" class="btn ghost tiny">➕ Anotar a alguien</button>` : "";
   const bh=$("bizHint"); if(bh) bh.hidden = !admin;
-  const list=(state.bizcochos||[]).filter(b=>!b.pagado).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const list=(state.bizcochos||[]).filter(b=>!b.pagado && !b.justificado).sort((a,b)=>(b.ts||0)-(a.ts||0));
   if(cnt) cnt.textContent = list.length ? `${list.length} pendiente${list.length>1?"s":""}` : "";
   if(!list.length){ cont.innerHTML=`<div class="biz-empty">Nadie debe bizcochos por ahora 🎉</div>`; renderHistorial(); return; }
   cont.innerHTML = list.map(b=>{
@@ -804,7 +806,7 @@ function renderBizcochos(){
     const blab=bloque(b.bloque)?bloque(b.bloque).label:"";
     const meta=[cuando,blab,b.motivo||"canceló tarde"].filter(Boolean).join(" · ");
     const id=b.id || `${b.fecha}__${b.bloque}__${b.ownerUid}`;
-    const btn=admin?`<button class="btn ghost tiny" data-biz="${id}">Ya trajo ✓</button>`:"";
+    const btn=admin?`<span class="biz-btns"><button class="btn ghost tiny" data-just="${id}">🤒 Justificar</button><button class="btn ghost tiny" data-biz="${id}">Ya trajo ✓</button></span>`:"";
     return `<div class="biz-row">
       <div class="biz-info"><span class="biz-name">🥐 ${b.nombre}</span>
         <span class="biz-meta">${meta}</span></div>${btn}</div>`;
@@ -822,8 +824,11 @@ function renderHistorial(){
   if(!state.histMes || !meses.includes(state.histMes)) state.histMes=meses[0];
   sel.innerHTML=meses.map(m=>{ const [y,mm]=m.split("-");
     return `<option value="${m}"${m===state.histMes?" selected":""}>${MESL[+mm-1]} ${y}</option>`; }).join("");
-  const delMes=todos.filter(b=>mesDe(b)===state.histMes);
-  if(!delMes.length){ body.innerHTML=`<div class="hist-empty">Sin registros este mes 🎉</div>`; return; }
+  const delMesTodo=todos.filter(b=>mesDe(b)===state.histMes);
+  const justificadas=delMesTodo.filter(b=>b.justificado).length;
+  const delMes=delMesTodo.filter(b=>!b.justificado);
+  const notaJust = justificadas ? `<div class="hist-just">🤒 ${justificadas} justificada(s) — no cuentan (enfermedad o imprevisto).</div>` : "";
+  if(!delMes.length){ body.innerHTML=`<div class="hist-empty">Sin registros este mes 🎉</div>${notaJust}`; return; }
   const porPersona={};
   for(const b of delMes){ const k=b.ownerUid||b.nombre;
     if(!porPersona[k]) porPersona[k]={nombre:b.nombre, tarde:0, noshow:0, pend:0};
@@ -841,7 +846,7 @@ function renderHistorial(){
           ${p.noshow?`<span class="htag n">${p.noshow} no vino</span>`:""}
           ${p.pend?`<span class="htag p">${p.pend} sin traer 🥐</span>`:""}
         </span>
-      </div>`).join("");
+      </div>`).join("") + notaJust;
 }
 function abrirAnotar(){
   if(!soyAdmin()) return;
@@ -995,7 +1000,15 @@ $("modalidad").addEventListener("click",e=>{ const b=e.target.closest("button");
 });
 $("histMes").addEventListener("change",e=>{ state.histMes=e.target.value; renderHistorial(); });
 $("bizActions").addEventListener("click",e=>{ if(e.target.closest("#btnAnotar")) abrirAnotar(); });
-$("bizList").addEventListener("click",e=>{ const b=e.target.closest("[data-biz]"); if(!b) return; if(!soyAdmin()) return;
+$("bizList").addEventListener("click",e=>{
+  if(!soyAdmin()) return;
+  const j=e.target.closest("[data-just]");
+  if(j){ const rec=(state.bizcochos||[]).find(x=>(x.id||`${x.fecha}__${x.bloque}__${x.ownerUid}`)===j.dataset.just); if(!rec) return;
+    const razon=prompt(`Justificar a ${rec.nombre} (no le corresponden bizcochos).\n\nMotivo:`, "enfermedad / imprevisto");
+    if(razon===null) return;
+    try{ Store.addBizcocho(j.dataset.just, Object.assign({}, rec, { id:j.dataset.just, justificado:true, motivoJust:(razon||"").trim()||"imprevisto", justTs:Date.now() })); }catch(err){}
+    return; }
+  const b=e.target.closest("[data-biz]"); if(!b) return;
   const rec=(state.bizcochos||[]).find(x=>(x.id||`${x.fecha}__${x.bloque}__${x.ownerUid}`)===b.dataset.biz); if(!rec) return;
   if(confirm("¿Marcar que ya trajo los bizcochos? Sale de la lista de pendientes, pero queda en el historial.")){
     try{ Store.addBizcocho(b.dataset.biz, Object.assign({}, rec, { id:b.dataset.biz, pagado:true, pagadoTs:Date.now() })); }catch(err){} } });
