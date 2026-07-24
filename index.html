@@ -149,6 +149,8 @@
   .seat .id{font-family:"Archivo"; font-weight:700; font-size:1.05rem; line-height:1}
   .seat .who{font-size:.64rem; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600}
   .seat .tag{font-size:.58rem; text-transform:uppercase; letter-spacing:.04em; opacity:.85}
+  .seat .parcial{font-size:.55rem; text-transform:uppercase; letter-spacing:.05em; font-weight:700; margin-top:2px;
+    background:rgba(255,255,255,.75); border:1px solid currentColor; border-radius:20px; padding:0 6px; opacity:.85; white-space:nowrap}
   .seat.libre{background:var(--libre-bg); border-color:var(--libre-bd); color:var(--libre-tx)}
   .seat.ocup{background:var(--ocup-bg); border-color:var(--ocup-bd); color:var(--ocup-tx); cursor:not-allowed}
   .seat.mine{background:var(--mine-bg); border-color:var(--mine-bd); color:var(--mine-tx)}
@@ -191,6 +193,21 @@
   .biz-meta{font-size:.76rem; color:var(--muted)}
   .biz-actions{margin-top:10px}
   .biz-actions:empty{margin-top:0}
+  .histsel{border:1.5px solid var(--line); border-radius:20px; padding:5px 10px; font:inherit; font-size:.82rem; font-weight:600; background:#fff; color:var(--ink); cursor:pointer}
+  .histsel:focus{outline:none; border-color:var(--brand)}
+  .hist-body{margin-top:12px}
+  .hist-empty{color:var(--muted); font-size:.9rem; padding:4px 0}
+  .hist-tot{color:var(--muted); font-size:.82rem; margin-bottom:10px}
+  .hist-row{display:flex; align-items:center; gap:10px; padding:9px 12px; border:1.5px solid var(--line); border-radius:11px; background:#fcfdfe; margin-bottom:8px}
+  .hist-pos{flex:0 0 auto; width:24px; height:24px; border-radius:50%; background:var(--paper); border:1px solid var(--line); color:var(--muted);
+    font-family:"Archivo"; font-weight:700; font-size:.78rem; display:flex; align-items:center; justify-content:center}
+  .hist-row.top .hist-pos{background:var(--brand); border-color:var(--brand); color:#fff}
+  .hist-nm{font-weight:600; flex:1; min-width:0}
+  .hist-tags{display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end}
+  .htag{font-size:.74rem; font-weight:600; border-radius:20px; padding:2px 9px; white-space:nowrap; border:1px solid}
+  .htag.t{background:#fdecec; border-color:#f0b3b3; color:#b3241f}
+  .htag.n{background:#fff4e0; border-color:#e6c68a; color:#8a5b00}
+  .htag.p{background:#e6f4ea; border-color:#8bc79f; color:#15692f}
   .pinselect, .pininput.mot{width:100%; max-width:none; text-align:left; letter-spacing:normal; font-size:1rem; font-weight:500; padding:11px 12px; margin-bottom:6px; border:1.5px solid var(--line); border-radius:10px; background:#fff; color:var(--ink)}
   .pinselect:focus, .pininput.mot:focus{outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(200,16,46,.15)}
 
@@ -290,10 +307,18 @@
       <div id="bizActions" class="biz-actions"></div>
       <div id="bizList" class="biz-list"></div>
     </section>
+
+    <section class="card" id="histCard">
+      <div class="plano-head">
+        <span class="plano-title">📊 Historial del mes</span>
+        <select id="histMes" class="histsel"></select>
+      </div>
+      <div id="histBody" class="hist-body"></div>
+    </section>
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v2.3</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v2.6</b>
   </footer>
 </div>
 
@@ -426,9 +451,27 @@ function niceName(email){ const lp=(email||"").split("@")[0];
 const state = {
   uid:null, email:"", nombre:"", mode:"local", authError:null, _demoExtra:"",
   fecha:null, bloque:CONFIG.bloques[0].id, ambos:true,
-  reservas:{}, asistencia:{}, bizcochos:[], pending:null, pendingMod:null, diasSel:new Set(),
+  reservas:{}, asistencia:{}, bizcochos:[], histMes:null, pending:null, pendingMod:null, diasSel:new Set(),
 };
 const bloquesActivos=()=> state.ambos ? CONFIG.bloques.map(b=>b.id) : [state.bloque];
+/* Ocupación de una silla considerando TODOS los turnos activos (clave para "Jornada completa") */
+function ocupacion(seatId){
+  const act=bloquesActivos();
+  const pares=act.map(b=>({b, r:state.reservas[`${seatId}__${b}`]})).filter(x=>x.r);
+  const ajenos=pares.filter(x=>x.r.ownerUid!==state.uid), mios=pares.filter(x=>x.r.ownerUid===state.uid);
+  return { ajeno: ajenos[0]? ajenos[0].r : null, mio: mios[0]? mios[0].r : null,
+           ajenoBloques: ajenos.map(x=>x.b), mioBloques: mios.map(x=>x.b), activos: act };
+}
+/* Etiqueta del turno ocupado cuando la silla está tomada solo en parte de la jornada */
+function parcial(bloquesTomados, activos){
+  if(!state.ambos || !bloquesTomados.length || bloquesTomados.length>=activos.length) return "";
+  return bloquesTomados.map(b=>bloque(b).label).join(" y ");
+}
+function libreEn(bloquesTomados, activos){
+  const libres=activos.filter(b=>!bloquesTomados.includes(b));
+  return libres.map(b=>bloque(b).label).join(" y ");
+}
+const etiquetaTurno=()=> state.ambos ? "Jornada completa" : bloque(state.bloque).label;
 
 function diasDisponibles(){
   const hoy=new Date(); hoy.setHours(0,0,0,0);
@@ -467,7 +510,9 @@ const LocalStore = {
     this._cb({reservas,asistencia}); },
   onBizcochos(cb){ this._bizCb=cb; this._emitBiz(); },
   _emitBiz(){ if(this._bizCb) this._bizCb(Object.values(this.bizcochos)); },
-  async reservar(id,data){ if(this.res[id]) throw new Error("OCUPADO"); this.res[id]=data; this._persist(); this._emit(); },
+  async reservar(id,data){ const ex=this.res[id];
+    if(ex && ex.ownerUid!==data.ownerUid) throw new Error("OCUPADO");
+    const nuevo=!ex; this.res[id]=data; this._persist(); this._emit(); return nuevo; },
   async cancelar(id){ delete this.res[id]; this._persist(); this._emit(); },
   async setAsist(id,data){ this.asist[id]=data; this._persist(); this._emit(); },
   async delAsist(id){ delete this.asist[id]; this._persist(); this._emit(); },
@@ -493,8 +538,10 @@ function makeFirebaseStore(fs, db){
     },
     onBizcochos(cb){ unsubB&&unsubB();
       unsubB=onSnapshot(collection(db,"bizcochos"),snap=>{ const list=[]; snap.forEach(d=>list.push(d.data())); cb(list); }, onErr); },
-    async reservar(id,data){ await runTransaction(db, async (tx)=>{ const ref=doc(db,"reservas",id);
-      const c=await tx.get(ref); if(c.exists()) throw new Error("OCUPADO"); tx.set(ref,data); }); },
+    async reservar(id,data){ return await runTransaction(db, async (tx)=>{ const ref=doc(db,"reservas",id);
+      const c=await tx.get(ref);
+      if(c.exists()){ const d=c.data()||{}; if(d.ownerUid!==data.ownerUid) throw new Error("OCUPADO"); tx.set(ref,data); return false; }
+      tx.set(ref,data); return true; }); },
     async cancelar(id){ await deleteDoc(doc(db,"reservas",id)); },
     async setAsist(id,data){ await setDoc(doc(db,"asistencia",id),data); },
     async delAsist(id){ await deleteDoc(doc(db,"asistencia",id)); },
@@ -680,16 +727,24 @@ function renderPlano(){
       return `<button class="seat block" data-seat="${s.id}" data-block="1" aria-disabled="true" tabindex="-1" title="${refb} · No disponible" aria-label="${refb} · No disponible">
         <span class="id">${s.label}</span><span class="tag">No disp.</span></button>`;
     }
-    const r=state.reservas[`${s.id}__${state.bloque}`];
-    let cls="libre", who="", tag="Libre", dis="";
-    if(r){ ocupados++;
-      if(r.ownerUid===me){ cls="mine"; tag="Tu lugar"; who=r.nombre; }
-      else { cls="ocup"; tag="Reservado"; who=r.nombre; dis="aria-disabled=\"true\""; }
+    const oc=ocupacion(s.id);
+    let cls="libre", who="", tag="Libre", dis="", extra="";
+    if(oc.ajeno || oc.mio){ ocupados++;
+      const tomados = oc.ajeno ? oc.ajenoBloques : oc.mioBloques;
+      const soloEn = parcial(tomados, oc.activos);
+      if(oc.ajeno){ cls="ocup"; tag="Reservado"; who=oc.ajeno.nombre; dis="aria-disabled=\"true\""; }
+      else { cls="mine"; tag="Tu lugar"; who=oc.mio.nombre; }
+      if(soloEn){ extra=`<span class="parcial">solo ${soloEn}</span>`; }
     } else if(state.pending===s.id){ cls="pend"; tag="Elegida"; }
     const ref=`OFIC. ${s.sala} · puesto ${s.label}`;
-    const titulo=r?`${ref} · ${tag}: ${r.nombre}`:`${ref} · Libre`;
+    const quien=oc.ajeno||oc.mio;
+    const tomados2 = oc.ajeno ? oc.ajenoBloques : oc.mioBloques;
+    const soloEn2 = quien ? parcial(tomados2, oc.activos) : "";
+    const titulo = quien
+      ? `${ref} · ${tag}${soloEn2?` solo ${soloEn2}`:""}: ${quien.nombre}${soloEn2?` · Libre en ${libreEn(tomados2, oc.activos)} (cambiá de turno)`:""}`
+      : `${ref} · Libre`;
     return `<button class="seat ${cls}" data-seat="${s.id}" ${dis} title="${titulo}" aria-label="${titulo}">
-      <span class="id">${s.label}</span>${who?`<span class="who">${who}</span>`:`<span class="tag">${tag}</span>`}</button>`;
+      <span class="id">${s.label}</span>${who?`<span class="who">${who}</span>`:`<span class="tag">${tag}</span>`}${extra}</button>`;
   };
   const mitad=Math.ceil(POR_POD/2);
   const planta=SALAS.map(s=>{ let pods="";
@@ -699,11 +754,11 @@ function renderPlano(){
   }).join("");
   $("zonas").innerHTML=`<div class="planta">${planta}</div>`;
   const usables=ASIENTOS.filter(a=>!esBloqueado(a.id)).length, libres=usables-ocupados;
-  $("occ").innerHTML=`<b>${libres}</b> libres de <b>${usables}</b> · ${bloque(state.bloque).label}`;
+  $("occ").innerHTML=`<b>${libres}</b> libres de <b>${usables}</b> · ${etiquetaTurno()}`;
   const banner=$("banner");
   if(bloqueado){ banner.className="banner lock show";
-    banner.textContent=`Estás en ${modal(modalAhora).label.toLowerCase()} en ${bloque(state.bloque).label.toLowerCase()}: no se reserva asiento. Cambiá a “Oficina” para elegir silla.`; }
-  else if(libres<=0){ banner.className="banner full show"; banner.textContent="Oficina completa para este turno. No hay asientos disponibles."; }
+    banner.textContent=`Estás en ${modal(modalAhora).label.toLowerCase()} en ${etiquetaTurno().toLowerCase()}: no se reserva asiento. Cambiá a “Oficina” para elegir silla.`; }
+  else if(libres<=0){ banner.className="banner full show"; banner.textContent=`Oficina completa para ${state.ambos?"la jornada completa":"este turno"}. No hay asientos disponibles.`; }
   else { banner.className="banner"; banner.textContent=""; }
 }
 function renderJornada(){
@@ -740,9 +795,9 @@ function renderBizcochos(){
   const admin=soyAdmin();
   if(acc) acc.innerHTML = admin ? `<button id="btnAnotar" class="btn ghost tiny">➕ Anotar a alguien</button>` : "";
   const bh=$("bizHint"); if(bh) bh.hidden = !admin;
-  const list=(state.bizcochos||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const list=(state.bizcochos||[]).filter(b=>!b.pagado).sort((a,b)=>(b.ts||0)-(a.ts||0));
   if(cnt) cnt.textContent = list.length ? `${list.length} pendiente${list.length>1?"s":""}` : "";
-  if(!list.length){ cont.innerHTML=`<div class="biz-empty">Nadie debe bizcochos por ahora 🎉</div>`; return; }
+  if(!list.length){ cont.innerHTML=`<div class="biz-empty">Nadie debe bizcochos por ahora 🎉</div>`; renderHistorial(); return; }
   cont.innerHTML = list.map(b=>{
     const d=new Date((b.fecha||"")+"T00:00:00");
     const cuando=isNaN(d.getTime())?"":`${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
@@ -754,6 +809,39 @@ function renderBizcochos(){
       <div class="biz-info"><span class="biz-name">🥐 ${b.nombre}</span>
         <span class="biz-meta">${meta}</span></div>${btn}</div>`;
   }).join("");
+  renderHistorial();
+}
+const MESL=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const mesDe=(b)=> (b.fecha||"").slice(0,7);
+const tipoDe=(b)=> b.tipo || (/cancel/i.test(b.motivo||"") ? "tarde" : "noshow");
+function renderHistorial(){
+  const sel=$("histMes"), body=$("histBody"); if(!sel||!body) return;
+  const todos=(state.bizcochos||[]).filter(b=>mesDe(b));
+  const hoy=new Date(), mesActual=`${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,"0")}`;
+  const meses=[...new Set(todos.map(mesDe).concat([mesActual]))].sort().reverse();
+  if(!state.histMes || !meses.includes(state.histMes)) state.histMes=meses[0];
+  sel.innerHTML=meses.map(m=>{ const [y,mm]=m.split("-");
+    return `<option value="${m}"${m===state.histMes?" selected":""}>${MESL[+mm-1]} ${y}</option>`; }).join("");
+  const delMes=todos.filter(b=>mesDe(b)===state.histMes);
+  if(!delMes.length){ body.innerHTML=`<div class="hist-empty">Sin registros este mes 🎉</div>`; return; }
+  const porPersona={};
+  for(const b of delMes){ const k=b.ownerUid||b.nombre;
+    if(!porPersona[k]) porPersona[k]={nombre:b.nombre, tarde:0, noshow:0, pend:0};
+    const p=porPersona[k]; tipoDe(b)==="tarde" ? p.tarde++ : p.noshow++; if(!b.pagado) p.pend++; }
+  const rank=Object.values(porPersona).map(p=>Object.assign(p,{total:p.tarde+p.noshow}))
+    .sort((a,b)=> b.total-a.total || a.nombre.localeCompare(b.nombre,"es"));
+  const tT=rank.reduce((s,p)=>s+p.tarde,0), tN=rank.reduce((s,p)=>s+p.noshow,0);
+  body.innerHTML=`<div class="hist-tot">${rank.length} persona(s) · ${tT} cancelación(es) tardía(s) · ${tN} incumplimiento(s)</div>`+
+    rank.map((p,i)=>`
+      <div class="hist-row${i===0&&p.total>1?" top":""}">
+        <span class="hist-pos">${i+1}</span>
+        <span class="hist-nm">${p.nombre}</span>
+        <span class="hist-tags">
+          ${p.tarde?`<span class="htag t">${p.tarde} tarde</span>`:""}
+          ${p.noshow?`<span class="htag n">${p.noshow} no vino</span>`:""}
+          ${p.pend?`<span class="htag p">${p.pend} sin traer 🥐</span>`:""}
+        </span>
+      </div>`).join("");
 }
 function abrirAnotar(){
   if(!soyAdmin()) return;
@@ -786,7 +874,7 @@ async function confirmarAnotar(){
   if(!p){ return; }
   const motivo=($("anMotivo").value||"").trim()||"no vino";
   const id=`manual__${email}__${Date.now()}`;
-  try{ await Store.addBizcocho(id,{ id, nombre:p.nombre, ownerUid:email, fecha:state.fecha, motivo, ts:Date.now(), manual:true }); }
+  try{ await Store.addBizcocho(id,{ id, nombre:p.nombre, ownerUid:email, fecha:state.fecha, motivo, tipo:"noshow", ts:Date.now(), manual:true }); }
   catch(e){ const m=$("anMsg"); if(m) m.textContent="No se pudo anotar. Reintentá."; return; }
   cerrarAnotar();
 }
@@ -834,7 +922,7 @@ async function cancelar(seatId){
     const tarde = !sePuedeCancelar(state.fecha,bid); if(tarde) multa=true;
     try{ await Store.cancelar(`${state.fecha}__${seatId}__${bid}`); n++;
       if(tarde){ const bzid=`${state.fecha}__${bid}__${state.uid}`; try{ await Store.addBizcocho(bzid,
-        { id:bzid, nombre:state.nombre, ownerUid:state.uid, fecha:state.fecha, bloque:bid, motivo:"canceló tarde", ts:Date.now() }); }catch(e){} }
+        { id:bzid, nombre:state.nombre, ownerUid:state.uid, fecha:state.fecha, bloque:bid, motivo:"canceló tarde", tipo:"tarde", ts:Date.now() }); }catch(e){} }
     }catch(e){ toast("No se pudo cancelar."); }
   }
   if(n) toast(multa ? `Cancelado ${seatId}. Cancelaste con menos de 4 h → bizcochos 🥐` : `Cancelado ${seatId}.`);
@@ -842,15 +930,28 @@ async function cancelar(seatId){
 async function confirmarReserva(){
   if(!listo()) return; const seatId=state.pending; if(!seatId) return;
   if(esBloqueado(seatId)){ toast("Ese puesto no está disponible."); clearPending(); renderPlano(); return; }
-  const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let ok=0, ocup=0;
-  for(const dia of dias){ for(const bid of turnos){
-    if(dia===state.fecha){ const prev=miAsiento(bid); if(prev && prev!==seatId){ try{ await Store.cancelar(`${dia}__${prev}__${bid}`); }catch(e){} } }
-    try{ await Store.delAsist(`${dia}__${bid}__${me}`); }catch(e){}
-    try{ await Store.reservar(`${dia}__${seatId}__${bid}`,{ fecha:dia, asiento:seatId, bloque:bid, nombre:state.nombre, ownerUid:me, creado:Date.now() }); ok++; }
-    catch(e){ ocup++; }
-  }}
-  clearPending(); renderPlano(); renderJornada();
-  toast(ok ? `Reservado ${seatId} en ${ok} bloque(s)${ocup?` · ${ocup} ya ocupado(s)`:""}.` : "Ese puesto ya estaba ocupado.");
+  const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let diasOk=0, diasNo=0;
+  for(const dia of dias){
+    const creados=[]; let fallo=false;
+    // 1) Intento reservar TODOS los turnos del día. Si uno falla, deshago los que hice.
+    for(const bid of turnos){
+      const rid=`${dia}__${seatId}__${bid}`;
+      try{ const nuevo=await Store.reservar(rid,{ fecha:dia, asiento:seatId, bloque:bid, nombre:state.nombre, ownerUid:me, creado:Date.now() });
+           if(nuevo!==false) creados.push(rid); }
+      catch(e){ fallo=true; break; }
+    }
+    if(fallo){ for(const rid of creados){ try{ await Store.cancelar(rid); }catch(e){} } diasNo++; continue; }
+    // 2) Recién con el día completo asegurado, libero mi silla anterior y quito teletrabajo/campo.
+    for(const bid of turnos){
+      if(dia===state.fecha){ const prev=miAsiento(bid); if(prev && prev!==seatId){ try{ await Store.cancelar(`${dia}__${prev}__${bid}`); }catch(e){} } }
+      try{ await Store.delAsist(`${dia}__${bid}__${me}`); }catch(e){}
+    }
+    diasOk++;
+  }
+  clearPending(); renderPlano(); renderJornada(); renderPanel();
+  toast(diasOk
+    ? `Reservado ${seatId} · ${etiquetaTurno()} · ${diasOk} día(s)${diasNo?` · ${diasNo} día(s) ya ocupado(s)`:""}.`
+    : `${seatId} ya está ocupado en ${state.ambos?"alguno de los turnos":"ese turno"}.`);
 }
 function iniciarModalidad(mod){
   if(!listo()) return;
@@ -892,21 +993,28 @@ $("modalidad").addEventListener("click",e=>{ const b=e.target.closest("button");
     else { clearPending(); setModalidad("oficina"); }                            // ya está en oficina → inmediato
   } else { iniciarModalidad(m); }
 });
+$("histMes").addEventListener("change",e=>{ state.histMes=e.target.value; renderHistorial(); });
 $("bizActions").addEventListener("click",e=>{ if(e.target.closest("#btnAnotar")) abrirAnotar(); });
 $("bizList").addEventListener("click",e=>{ const b=e.target.closest("[data-biz]"); if(!b) return; if(!soyAdmin()) return;
-  if(confirm("¿Marcar que ya trajo los bizcochos? Se quita de la lista.")){ try{ Store.delBizcocho(b.dataset.biz); }catch(err){} } });
+  const rec=(state.bizcochos||[]).find(x=>(x.id||`${x.fecha}__${x.bloque}__${x.ownerUid}`)===b.dataset.biz); if(!rec) return;
+  if(confirm("¿Marcar que ya trajo los bizcochos? Sale de la lista de pendientes, pero queda en el historial.")){
+    try{ Store.addBizcocho(b.dataset.biz, Object.assign({}, rec, { id:b.dataset.biz, pagado:true, pagadoTs:Date.now() })); }catch(err){} } });
 $("zonas").addEventListener("click",e=>{
   const b=e.target.closest(".seat"); if(!b) return; const seatId=b.dataset.seat;
   if(b.dataset.block){ toast("Ese puesto no está disponible."); return; }
   if(miModalidad(state.bloque)!=="oficina"){ toast("Cambiá la modalidad a “Oficina” para reservar."); return; }
-  const r=state.reservas[`${seatId}__${state.bloque}`];
-  if(r){
-    if(r.ownerUid===state.uid){
-      const tarde=bloquesActivos().some(bid=> miAsiento(bid)===seatId && !sePuedeCancelar(state.fecha,bid));
-      const aviso=tarde ? "\n\n⚠️ Estás cancelando con menos de 4 h de antelación: te toca traer bizcochos 🥐." : "";
-      if(confirm(`¿Cancelar tu reserva de ${seatId}${state.ambos?" (mañana y tarde)":` (${bloque(state.bloque).label})`}?${aviso}`)) cancelar(seatId);
-    }
-    else { toast(`${seatId} ya está reservado por ${r.nombre}.`); }
+  const oc=ocupacion(seatId);
+  if(oc.ajeno){
+    const soloEn=parcial(oc.ajenoBloques, oc.activos);
+    toast(soloEn
+      ? `${seatId}: ${oc.ajeno.nombre} la tiene solo en ${soloEn}. Elegí “${libreEn(oc.ajenoBloques, oc.activos)}” para reservarla.`
+      : `${seatId} ya está reservado por ${oc.ajeno.nombre}.`);
+    return;
+  }
+  if(oc.mio){
+    const tarde=bloquesActivos().some(bid=> miAsiento(bid)===seatId && !sePuedeCancelar(state.fecha,bid));
+    const aviso=tarde ? "\n\n⚠️ Estás cancelando con menos de 4 h de antelación: te toca traer bizcochos 🥐." : "";
+    if(confirm(`¿Cancelar tu reserva de ${seatId} (${etiquetaTurno()})?${aviso}`)) cancelar(seatId);
     return;
   }
   if(!listo()) return;
