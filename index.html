@@ -242,7 +242,7 @@
       <span><span class="brandname">CSI</span><span class="brandtag">GTLyT</span></span>
     </div>
     <h1>Reservá tu asiento</h1>
-    <p class="sub">Elegí el día y el turno, y tocá una silla libre. Gris es libre, rojo está reservado y verde es tu lugar. Podés cancelar hasta 4&nbsp;h antes del turno; si cancelás más tarde o no cumplís la reserva, te toca traer bizcochos 🥐.</p>
+    <p class="sub">Elegí el día y el turno, y tocá una silla libre. Gris es libre, rojo está reservado y verde es tu lugar. Podés cancelar hasta 4&nbsp;h antes del turno; cancelar más tarde o no cumplir la reserva se anota, y a la 3&ordf; vez en el mes te toca traer bizcochos 🥐.</p>
     <div id="userbar" class="userbar" hidden>Entraste como <b id="userEmail"></b><button id="logout" class="btn ghost tiny">No soy yo / Salir</button></div>
   </header>
 
@@ -305,7 +305,7 @@
         <span class="plano-title">🥐 Deben bizcochos</span>
         <span class="occ" id="bizCount"></span>
       </div>
-      <div class="hint" id="bizHint" hidden>Se anota solo cuando alguien cancela con menos de 4&nbsp;h. Tocá “Ya trajo” cuando cumpla, o “Justificar” si tuvo un imprevisto (no cuenta en el historial).</div>
+      <div class="hint" id="bizHint" hidden>Se anota cada cancelación tardía o inasistencia. Cada 3 en el mes (por persona) genera una deuda real. Tocá “Ya trajo” cuando cumpla, o “Justificar” si tuvo un imprevisto (no cuenta en el historial).</div>
       <div id="bizActions" class="biz-actions"></div>
       <div id="bizList" class="biz-list"></div>
     </section>
@@ -320,7 +320,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v2.8</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.0</b>
   </footer>
 </div>
 
@@ -524,12 +524,16 @@ const LocalStore = {
   async setUsuario(email,data){ this.usuarios[email]=data; this._persistU(); },
   async addBizcocho(id,data){ this.bizcochos[id]=data; this._persistB(); this._emitBiz(); },
   async delBizcocho(id){ delete this.bizcochos[id]; this._persistB(); this._emitBiz(); },
+  async misReservasDia(fecha, uid){
+    const out=[]; for(const id in this.res){ const r=this.res[id]; if(r.fecha===fecha && r.ownerUid===uid) out.push({id, bloque:r.bloque, asiento:r.asiento}); }
+    return out;
+  },
 };
 LocalStore.init();
 window.addEventListener("storage",()=>{ if(Store===LocalStore){ LocalStore.init(); LocalStore._emit(); LocalStore._emitBiz(); }});
 
 function makeFirebaseStore(fs, db){
-  const { collection, doc, onSnapshot, query, where, runTransaction, deleteDoc, setDoc, getDoc } = fs;
+  const { collection, doc, onSnapshot, query, where, runTransaction, deleteDoc, setDoc, getDoc, getDocsFromServer } = fs;
   let unsubR=null, unsubA=null, unsubB=null, reservas={}, asistencia={};
   const onErr=(e)=>{ console.error(e); if(e&&e.code==="permission-denied") toast("Permiso denegado: revisá las reglas de Firestore."); };
   return {
@@ -553,6 +557,13 @@ function makeFirebaseStore(fs, db){
     async setUsuario(email,data){ await setDoc(doc(db,"usuarios",email),data); },
     async addBizcocho(id,data){ await setDoc(doc(db,"bizcochos",id),data); },
     async delBizcocho(id){ await deleteDoc(doc(db,"bizcochos",id)); },
+    /* Trae del SERVIDOR (sin caché local) las reservas reales de una persona para un día.
+       Clave para evitar que queden sillas "fantasma" si el dato local está desactualizado. */
+    async misReservasDia(fecha, uid){
+      const snap=await getDocsFromServer(query(collection(db,"reservas"), where("fecha","==",fecha), where("ownerUid","==",uid)));
+      const out=[]; snap.forEach(d=>{ const r=d.data(); out.push({ id:d.id, bloque:r.bloque, asiento:r.asiento }); });
+      return out;
+    },
   };
 }
 function subscribe(){ Store.onData(state.fecha, (data)=>{
@@ -799,7 +810,7 @@ function renderBizcochos(){
   const admin=soyAdmin();
   if(acc) acc.innerHTML = admin ? `<button id="btnAnotar" class="btn ghost tiny">➕ Anotar a alguien</button>` : "";
   const bh=$("bizHint"); if(bh) bh.hidden = !admin;
-  const list=(state.bizcochos||[]).filter(b=>!b.pagado && !b.justificado).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const list=(state.bizcochos||[]).filter(b=>!b.pagado && !b.justificado && b.debita!==false).sort((a,b)=>(b.ts||0)-(a.ts||0));
   if(cnt) cnt.textContent = list.length ? `${list.length} pendiente${list.length>1?"s":""}` : "";
   if(!list.length){ cont.innerHTML=`<div class="biz-empty">Nadie debe bizcochos por ahora 🎉</div>`; renderHistorial(); return; }
   cont.innerHTML = list.map(b=>{
@@ -818,6 +829,9 @@ function renderBizcochos(){
 const MESL=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const mesDe=(b)=> (b.fecha||"").slice(0,7);
 const tipoDe=(b)=> b.tipo || (/cancel/i.test(b.motivo||"") ? "tarde" : "noshow");
+/* Reincidencia: cuenta cancelaciones tardías + no-shows del mes (sin contar justificadas).
+   Cada 3ra vez (3,6,9…) se marca "debita:true" y recién ahí genera una deuda de bizcochos real. */
+const contarStrikes = (email, mes) => (state.bizcochos||[]).filter(b=> b.ownerUid===email && mesDe(b)===mes && !b.justificado).length;
 function renderHistorial(){
   const sel=$("histMes"), body=$("histBody"); if(!sel||!body) return;
   const todos=(state.bizcochos||[]).filter(b=>mesDe(b));
@@ -834,7 +848,7 @@ function renderHistorial(){
   const porPersona={};
   for(const b of delMes){ const k=b.ownerUid||b.nombre;
     if(!porPersona[k]) porPersona[k]={nombre:b.nombre, tarde:0, noshow:0, pend:0};
-    const p=porPersona[k]; tipoDe(b)==="tarde" ? p.tarde++ : p.noshow++; if(!b.pagado) p.pend++; }
+    const p=porPersona[k]; tipoDe(b)==="tarde" ? p.tarde++ : p.noshow++; if(!b.pagado && b.debita!==false) p.pend++; }
   const rank=Object.values(porPersona).map(p=>Object.assign(p,{total:p.tarde+p.noshow}))
     .sort((a,b)=> b.total-a.total || a.nombre.localeCompare(b.nombre,"es"));
   const tT=rank.reduce((s,p)=>s+p.tarde,0), tN=rank.reduce((s,p)=>s+p.noshow,0);
@@ -880,10 +894,13 @@ async function confirmarAnotar(){
   const email=$("anPersona").value; const p=PERSONAS.find(x=>x.email===email);
   if(!p){ return; }
   const motivo=($("anMotivo").value||"").trim()||"no vino";
+  const mes=mesDe({fecha:state.fecha});
+  const n=contarStrikes(email, mes)+1, debita=(n%3===0);
   const id=`manual__${email}__${Date.now()}`;
-  try{ await Store.addBizcocho(id,{ id, nombre:p.nombre, ownerUid:email, fecha:state.fecha, motivo, tipo:"noshow", ts:Date.now(), manual:true }); }
+  try{ await Store.addBizcocho(id,{ id, nombre:p.nombre, ownerUid:email, fecha:state.fecha, motivo, tipo:"noshow", debita, ts:Date.now(), manual:true }); }
   catch(e){ const m=$("anMsg"); if(m) m.textContent="No se pudo anotar. Reintentá."; return; }
   cerrarAnotar();
+  toast(debita ? `Anotado. Van 3 este mes → le toca traer bizcochos 🥐` : `Anotado. Van ${n} de 3 este mes.`);
 }
 function infoAsiento(id){ const a=ASIENTOS.find(x=>x.id===id); return a?`OFIC. ${a.sala} · puesto ${a.label}`:id; }
 function clearPending(){ state.pending=null; state.pendingMod=null; state.diasSel=new Set(); renderConfirm(); }
@@ -916,49 +933,64 @@ async function setModalidad(mod){
   for(const bid of bloquesActivos()){
     const aid=`${state.fecha}__${bid}__${me}`;
     if(mod==="oficina"){ try{ await Store.delAsist(aid); }catch(e){} }
-    else{ const seat=miAsiento(bid);
-      if(seat){ try{ await Store.cancelar(`${state.fecha}__${seat}__${bid}`); }catch(e){} }
+    else{
+      let mis=[]; try{ mis=await Store.misReservasDia(state.fecha, me); }catch(e){ mis=[]; }
+      for(const r of mis){ if(r.bloque===bid){ try{ await Store.cancelar(r.id); }catch(e){} } }
       await Store.setAsist(aid,{ fecha:state.fecha, bloque:bid, nombre:state.nombre, ownerUid:me, modalidad:mod }); }
   }
   toast(mod==="oficina" ? "Modalidad: Oficina. Tocá tu silla." : `Marcado: ${modal(mod).label}.`);
 }
 async function cancelar(seatId){
-  let n=0, multa=false;
+  let n=0, algunaTarde=false, algunaDebita=false, van=0;
+  const mes=mesDe({fecha:state.fecha});
+  let contador=contarStrikes(state.uid, mes);
   for(const bid of bloquesActivos()){
     if(miAsiento(bid)!==seatId) continue;
-    const tarde = !sePuedeCancelar(state.fecha,bid); if(tarde) multa=true;
+    const tarde = !sePuedeCancelar(state.fecha,bid);
     try{ await Store.cancelar(`${state.fecha}__${seatId}__${bid}`); n++;
-      if(tarde){ const bzid=`${state.fecha}__${bid}__${state.uid}`; try{ await Store.addBizcocho(bzid,
-        { id:bzid, nombre:state.nombre, ownerUid:state.uid, fecha:state.fecha, bloque:bid, motivo:"canceló tarde", tipo:"tarde", ts:Date.now() }); }catch(e){} }
+      if(tarde){ algunaTarde=true; contador++; van=contador; const debita=(contador%3===0); if(debita) algunaDebita=true;
+        const bzid=`${state.fecha}__${bid}__${state.uid}`; try{ await Store.addBizcocho(bzid,
+        { id:bzid, nombre:state.nombre, ownerUid:state.uid, fecha:state.fecha, bloque:bid, motivo:"canceló tarde", tipo:"tarde", debita, ts:Date.now() }); }catch(e){} }
     }catch(e){ toast("No se pudo cancelar."); }
   }
-  if(n) toast(multa ? `Cancelado ${seatId}. Cancelaste con menos de 4 h → bizcochos 🥐` : `Cancelado ${seatId}.`);
+  if(n){
+    if(algunaDebita) toast(`Cancelado ${seatId}. Van 3 cancelaciones tardías/inasistencias este mes → te toca traer bizcochos 🥐`);
+    else if(algunaTarde) toast(`Cancelado ${seatId}. Van ${van} de 3 este mes.`);
+    else toast(`Cancelado ${seatId}.`);
+  }
 }
 async function confirmarReserva(){
   if(!listo()) return; const seatId=state.pending; if(!seatId) return;
   if(esBloqueado(seatId)){ toast("Ese puesto no está disponible."); clearPending(); renderPlano(); return; }
-  const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let diasOk=0, diasNo=0;
-  for(const dia of dias){
-    const creados=[]; let fallo=false;
-    // 1) Intento reservar TODOS los turnos del día. Si uno falla, deshago los que hice.
-    for(const bid of turnos){
-      const rid=`${dia}__${seatId}__${bid}`;
-      try{ const nuevo=await Store.reservar(rid,{ fecha:dia, asiento:seatId, bloque:bid, nombre:state.nombre, ownerUid:me, creado:Date.now() });
-           if(nuevo!==false) creados.push(rid); }
-      catch(e){ fallo=true; break; }
+  if(state._reservando){ toast("Ya se está procesando tu reserva, esperá un segundo…"); return; }
+  state._reservando=true;
+  const btnC=$("btnConfirmar"); if(btnC){ btnC.disabled=true; btnC.textContent="Reservando…"; }
+  try{
+    const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let diasOk=0, diasNo=0;
+    for(const dia of dias){
+      // 0) Traigo del SERVIDOR (no de la copia local, que puede estar desactualizada) mis reservas reales de ese día.
+      let misPrevias=[]; try{ misPrevias=await Store.misReservasDia(dia, me); }catch(e){ misPrevias=[]; }
+      const creados=[]; let fallo=false;
+      // 1) Intento reservar TODOS los turnos del día. Si uno falla, deshago los que hice.
+      for(const bid of turnos){
+        const rid=`${dia}__${seatId}__${bid}`;
+        try{ const nuevo=await Store.reservar(rid,{ fecha:dia, asiento:seatId, bloque:bid, nombre:state.nombre, ownerUid:me, creado:Date.now() });
+             if(nuevo!==false) creados.push(rid); }
+        catch(e){ fallo=true; break; }
+      }
+      if(fallo){ for(const rid of creados){ try{ await Store.cancelar(rid); }catch(e){} } diasNo++; continue; }
+      // 2) Recién con el día completo asegurado, libero TODAS mis sillas previas de esos turnos (dato fresco del servidor) y quito teletrabajo/campo.
+      for(const bid of turnos){
+        for(const r of misPrevias){ if(r.bloque===bid && r.asiento!==seatId){ try{ await Store.cancelar(r.id); }catch(e){} } }
+        try{ await Store.delAsist(`${dia}__${bid}__${me}`); }catch(e){}
+      }
+      diasOk++;
     }
-    if(fallo){ for(const rid of creados){ try{ await Store.cancelar(rid); }catch(e){} } diasNo++; continue; }
-    // 2) Recién con el día completo asegurado, libero mi silla anterior y quito teletrabajo/campo.
-    for(const bid of turnos){
-      if(dia===state.fecha){ const prev=miAsiento(bid); if(prev && prev!==seatId){ try{ await Store.cancelar(`${dia}__${prev}__${bid}`); }catch(e){} } }
-      try{ await Store.delAsist(`${dia}__${bid}__${me}`); }catch(e){}
-    }
-    diasOk++;
-  }
-  clearPending(); renderPlano(); renderJornada(); renderPanel();
-  toast(diasOk
-    ? `Reservado ${seatId} · ${etiquetaTurno()} · ${diasOk} día(s)${diasNo?` · ${diasNo} día(s) ya ocupado(s)`:""}.`
-    : `${seatId} ya está ocupado en ${state.ambos?"alguno de los turnos":"ese turno"}.`);
+    clearPending(); renderPlano(); renderJornada(); renderPanel();
+    toast(diasOk
+      ? `Reservado ${seatId} · ${etiquetaTurno()} · ${diasOk} día(s)${diasNo?` · ${diasNo} día(s) ya ocupado(s)`:""}.`
+      : `${seatId} ya está ocupado en ${state.ambos?"alguno de los turnos":"ese turno"}.`);
+  } finally { state._reservando=false; }
 }
 function iniciarModalidad(mod){
   if(!listo()) return;
@@ -968,18 +1000,25 @@ function iniciarModalidad(mod){
 }
 async function confirmarModalidad(){
   if(!listo()) return; const mod=state.pendingMod; if(!mod) return;
-  const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let ok=0;
-  for(const dia of dias){ for(const bid of turnos){
-    if(mod==="oficina"){ try{ await Store.delAsist(`${dia}__${bid}__${me}`); ok++; }catch(e){} }
-    else {
-      if(dia===state.fecha){ const prev=miAsiento(bid); if(prev){ try{ await Store.cancelar(`${dia}__${prev}__${bid}`); }catch(e){} } }
-      try{ await Store.setAsist(`${dia}__${bid}__${me}`,{ fecha:dia, bloque:bid, nombre:state.nombre, ownerUid:me, modalidad:mod }); ok++; }catch(e){}
+  if(state._reservando){ toast("Ya se está procesando, esperá un segundo…"); return; }
+  state._reservando=true;
+  try{
+    const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let ok=0;
+    for(const dia of dias){
+      let mis=[]; if(mod!=="oficina"){ try{ mis=await Store.misReservasDia(dia, me); }catch(e){ mis=[]; } }
+      for(const bid of turnos){
+        if(mod==="oficina"){ try{ await Store.delAsist(`${dia}__${bid}__${me}`); ok++; }catch(e){} }
+        else {
+          for(const r of mis){ if(r.bloque===bid){ try{ await Store.cancelar(r.id); }catch(e){} } }
+          try{ await Store.setAsist(`${dia}__${bid}__${me}`,{ fecha:dia, bloque:bid, nombre:state.nombre, ownerUid:me, modalidad:mod }); ok++; }catch(e){}
+        }
+      }
     }
-  }}
-  clearPending(); renderModalidad(); renderPlano(); renderJornada(); renderPanel();
-  toast(mod==="oficina"
-    ? `Quitado teletrabajo/campo en ${dias.length} día(s).`
-    : (ok ? `Listo: ${modal(mod).label} confirmado en ${dias.length} día(s).` : "No se pudo guardar."));
+    clearPending(); renderModalidad(); renderPlano(); renderJornada(); renderPanel();
+    toast(mod==="oficina"
+      ? `Quitado teletrabajo/campo en ${dias.length} día(s).`
+      : (ok ? `Listo: ${modal(mod).label} confirmado en ${dias.length} día(s).` : "No se pudo guardar."));
+  } finally { state._reservando=false; }
 }
 
 /* ════════ EVENTOS ════════ */
@@ -1028,7 +1067,7 @@ $("zonas").addEventListener("click",e=>{
   }
   if(oc.mio){
     const tarde=bloquesActivos().some(bid=> miAsiento(bid)===seatId && !sePuedeCancelar(state.fecha,bid));
-    const aviso=tarde ? "\n\n⚠️ Estás cancelando con menos de 4 h de antelación: te toca traer bizcochos 🥐." : "";
+    const aviso=tarde ? "\n\n⚠️ Cancelando con menos de 4 h de antelación: cuenta para el cupo de bizcochos del mes (a la 3ª, te toca traer)." : "";
     if(confirm(`¿Cancelar tu reserva de ${seatId} (${etiquetaTurno()})?${aviso}`)) cancelar(seatId);
     return;
   }
