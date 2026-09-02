@@ -320,7 +320,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.0</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.1</b>
   </footer>
 </div>
 
@@ -431,6 +431,20 @@ const POR_POD = 6; const PODS_POR_SALA = 2;
    Para desbloquear alguno, borrá su id de acá. Ids: "SALA-NN" (ej. "112-01"). */
 const BLOQUEADOS = ["112-01","112-02","112-03","112-04","112-05","112-06"];
 const esBloqueado = (id)=> BLOQUEADOS.includes(id);
+
+/* Puestos bloqueados SOLO ciertos días de la semana (libres el resto). dias: 1=Lunes … 5=Viernes.
+   Para agregar otro: { id:"SALA-NN", dias:[1,2,3] }. Para sacar uno, borrá su línea. */
+const BLOQUEADOS_DIAS = [
+  { id:"112-07", dias:[1,2,3] },  // Lun–Mié bloqueado; libre Jue y Vie
+  { id:"112-12", dias:[1,2,3] },  // Lun–Mié bloqueado; libre Jue y Vie
+];
+const diaSemana = (fecha)=> new Date(`${fecha}T00:00:00`).getDay();
+/* Chequeo combinado (fijo + por día) para una fecha dada. Sin fecha, cae a la fecha actualmente elegida. */
+function bloqueadoEn(id, fecha){
+  if(esBloqueado(id)) return true;
+  const regla=BLOQUEADOS_DIAS.find(b=>b.id===id);
+  return regla ? regla.dias.includes(diaSemana(fecha || state.fecha)) : false;
+}
 const ASIENTOS = [];
 SALAS.forEach(s=>{ for(let p=0;p<PODS_POR_SALA;p++){ for(let i=0;i<POR_POD;i++){
   const n=p*POR_POD+i+1;
@@ -737,10 +751,13 @@ function renderPlano(){
   $("zonas").classList.toggle("locked", bloqueado);
   let ocupados=0;
   const seatHTML=(s)=>{
-    if(esBloqueado(s.id)){
+    if(bloqueadoEn(s.id, state.fecha)){
       const refb=`OFIC. ${s.sala} · puesto ${s.label}`;
-      return `<button class="seat block" data-seat="${s.id}" data-block="1" aria-disabled="true" tabindex="-1" title="${refb} · No disponible" aria-label="${refb} · No disponible">
-        <span class="id">${s.label}</span><span class="tag">No disp.</span></button>`;
+      const regla = !esBloqueado(s.id) ? BLOQUEADOS_DIAS.find(b=>b.id===s.id) : null;
+      const diasTxt = regla ? regla.dias.map(d=>DOW[d]).join("-") : "";
+      const etiquetaTitulo = diasTxt ? `No disponible (${diasTxt})` : "No disponible";
+      return `<button class="seat block" data-seat="${s.id}" data-block="1" aria-disabled="true" tabindex="-1" title="${refb} · ${etiquetaTitulo}" aria-label="${refb} · ${etiquetaTitulo}">
+        <span class="id">${s.label}</span><span class="tag">No disp.</span>${diasTxt?`<span class="parcial">${diasTxt}</span>`:""}</button>`;
     }
     const oc=ocupacion(s.id);
     let cls="libre", who="", tag="Libre", dis="", extra="";
@@ -768,7 +785,7 @@ function renderPlano(){
     return `<div class="sala"><div class="sala-lbl">${s.nombre}</div><div class="pods">${pods}</div></div>`;
   }).join("");
   $("zonas").innerHTML=`<div class="planta">${planta}</div>`;
-  const usables=ASIENTOS.filter(a=>!esBloqueado(a.id)).length, libres=usables-ocupados;
+  const usables=ASIENTOS.filter(a=>!bloqueadoEn(a.id, state.fecha)).length, libres=usables-ocupados;
   $("occ").innerHTML=`<b>${libres}</b> libres de <b>${usables}</b> · ${etiquetaTurno()}`;
   const banner=$("banner");
   if(bloqueado){ banner.className="banner lock show";
@@ -968,10 +985,12 @@ async function confirmarReserva(){
   try{
     const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let diasOk=0, diasNo=0;
     for(const dia of dias){
-      // 0) Traigo del SERVIDOR (no de la copia local, que puede estar desactualizada) mis reservas reales de ese día.
+      // 0) Ese puesto puede estar bloqueado solo algunos días de la semana (ej. Lun-Mié). Si este día cae bloqueado, se salta.
+      if(bloqueadoEn(seatId, dia)){ diasNo++; continue; }
+      // 1) Traigo del SERVIDOR (no de la copia local, que puede estar desactualizada) mis reservas reales de ese día.
       let misPrevias=[]; try{ misPrevias=await Store.misReservasDia(dia, me); }catch(e){ misPrevias=[]; }
       const creados=[]; let fallo=false;
-      // 1) Intento reservar TODOS los turnos del día. Si uno falla, deshago los que hice.
+      // 2) Intento reservar TODOS los turnos del día. Si uno falla, deshago los que hice.
       for(const bid of turnos){
         const rid=`${dia}__${seatId}__${bid}`;
         try{ const nuevo=await Store.reservar(rid,{ fecha:dia, asiento:seatId, bloque:bid, nombre:state.nombre, ownerUid:me, creado:Date.now() });
@@ -979,7 +998,7 @@ async function confirmarReserva(){
         catch(e){ fallo=true; break; }
       }
       if(fallo){ for(const rid of creados){ try{ await Store.cancelar(rid); }catch(e){} } diasNo++; continue; }
-      // 2) Recién con el día completo asegurado, libero TODAS mis sillas previas de esos turnos (dato fresco del servidor) y quito teletrabajo/campo.
+      // 3) Recién con el día completo asegurado, libero TODAS mis sillas previas de esos turnos (dato fresco del servidor) y quito teletrabajo/campo.
       for(const bid of turnos){
         for(const r of misPrevias){ if(r.bloque===bid && r.asiento!==seatId){ try{ await Store.cancelar(r.id); }catch(e){} } }
         try{ await Store.delAsist(`${dia}__${bid}__${me}`); }catch(e){}
@@ -988,8 +1007,8 @@ async function confirmarReserva(){
     }
     clearPending(); renderPlano(); renderJornada(); renderPanel();
     toast(diasOk
-      ? `Reservado ${seatId} · ${etiquetaTurno()} · ${diasOk} día(s)${diasNo?` · ${diasNo} día(s) ya ocupado(s)`:""}.`
-      : `${seatId} ya está ocupado en ${state.ambos?"alguno de los turnos":"ese turno"}.`);
+      ? `Reservado ${seatId} · ${etiquetaTurno()} · ${diasOk} día(s)${diasNo?` · ${diasNo} día(s) no disponible(s)`:""}.`
+      : `${seatId} no está disponible ${state.ambos?"en alguno de los turnos":"para esos días"}.`);
   } finally { state._reservando=false; }
 }
 function iniciarModalidad(mod){
