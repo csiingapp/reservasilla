@@ -320,7 +320,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.1</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.3</b>
   </footer>
 </div>
 
@@ -475,10 +475,13 @@ const bloquesActivos=()=> state.ambos ? CONFIG.bloques.map(b=>b.id) : [state.blo
 /* Ocupación de una silla considerando TODOS los turnos activos (clave para "Jornada completa") */
 function ocupacion(seatId){
   const act=bloquesActivos();
-  const pares=act.map(b=>({b, r:state.reservas[`${seatId}__${b}`]})).filter(x=>x.r);
-  const ajenos=pares.filter(x=>x.r.ownerUid!==state.uid), mios=pares.filter(x=>x.r.ownerUid===state.uid);
-  return { ajeno: ajenos[0]? ajenos[0].r : null, mio: mios[0]? mios[0].r : null,
-           ajenoBloques: ajenos.map(x=>x.b), mioBloques: mios.map(x=>x.b), activos: act };
+  const pares=act.map(b=>({b, r:state.reservas[`${seatId}__${b}`]||null}));
+  const ajenos=pares.filter(x=>x.r && x.r.ownerUid!==state.uid);
+  const mios=pares.filter(x=>x.r && x.r.ownerUid===state.uid);
+  const dueños=new Set(pares.filter(x=>x.r).map(x=> x.r.ownerUid===state.uid ? "__yo__" : x.r.ownerUid));
+  return { pares, ajeno: ajenos[0]? ajenos[0].r : null, mio: mios[0]? mios[0].r : null,
+           ajenoBloques: ajenos.map(x=>x.b), mioBloques: mios.map(x=>x.b), activos: act,
+           compartido: dueños.size>1 };  // true = más de un "dueño" distinto (yo+otro, u otro+otro) reparten el día
 }
 /* Etiqueta del turno ocupado cuando la silla está tomada solo en parte de la jornada */
 function parcial(bloquesTomados, activos){
@@ -542,6 +545,14 @@ const LocalStore = {
     const out=[]; for(const id in this.res){ const r=this.res[id]; if(r.fecha===fecha && r.ownerUid===uid) out.push({id, bloque:r.bloque, asiento:r.asiento}); }
     return out;
   },
+  async reservarAtomico(dia, seatId, turnos, uid, dataBase){
+    for(const bid of turnos){ const ex=this.res[`${dia}__${seatId}__${bid}`]; if(ex && ex.ownerUid!==uid) return { ok:false }; }
+    for(const bid of turnos){
+      for(const id in this.res){ const r=this.res[id]; if(r.fecha===dia && r.bloque===bid && r.ownerUid===uid && r.asiento!==seatId){ delete this.res[id]; } }
+      this.res[`${dia}__${seatId}__${bid}`] = Object.assign({}, dataBase, { bloque:bid });
+    }
+    this._persist(); this._emit(); return { ok:true };
+  },
 };
 LocalStore.init();
 window.addEventListener("storage",()=>{ if(Store===LocalStore){ LocalStore.init(); LocalStore._emit(); LocalStore._emitBiz(); }});
@@ -577,6 +588,23 @@ function makeFirebaseStore(fs, db){
       const snap=await getDocsFromServer(query(collection(db,"reservas"), where("fecha","==",fecha), where("ownerUid","==",uid)));
       const out=[]; snap.forEach(d=>{ const r=d.data(); out.push({ id:d.id, bloque:r.bloque, asiento:r.asiento }); });
       return out;
+    },
+    /* Reserva TODOS los turnos de un día para un puesto en UNA sola transacción atómica de Firestore:
+       o entra completo (turnos nuevos + libera lo previo del mismo día), o no entra nada.
+       Sin pasos separados que puedan fallar a medio camino (por eso ya no hace falta "deshacer"). */
+    async reservarAtomico(dia, seatId, turnos, uid, dataBase){
+      return await runTransaction(db, async (tx)=>{
+        // 1) LECTURAS primero (regla de Firestore: todas las lecturas antes que cualquier escritura).
+        const refsNuevos = turnos.map(bid => doc(db,"reservas", `${dia}__${seatId}__${bid}`));
+        const snapsNuevos = []; for(const ref of refsNuevos){ snapsNuevos.push(await tx.get(ref)); }
+        for(const snap of snapsNuevos){ if(snap.exists() && snap.data().ownerUid!==uid) return { ok:false }; }
+        const misSnap = await tx.get(query(collection(db,"reservas"), where("fecha","==",dia), where("ownerUid","==",uid)));
+        const misDocs=[]; misSnap.forEach(d=>misDocs.push({ ref:d.ref, bloque:d.data().bloque, asiento:d.data().asiento }));
+        // 2) ESCRITURAS (recién acá, ya con todo verificado): creo los turnos nuevos y libero mis sillas previas de esos mismos turnos.
+        refsNuevos.forEach((ref,i)=> tx.set(ref, Object.assign({}, dataBase, { bloque:turnos[i] })));
+        for(const bid of turnos){ for(const m of misDocs){ if(m.bloque===bid && m.asiento!==seatId){ tx.delete(m.ref); } } }
+        return { ok:true };
+      });
     },
   };
 }
@@ -761,20 +789,26 @@ function renderPlano(){
     }
     const oc=ocupacion(s.id);
     let cls="libre", who="", tag="Libre", dis="", extra="";
-    if(oc.ajeno || oc.mio){ ocupados++;
+    const ref=`OFIC. ${s.sala} · puesto ${s.label}`;
+    let titulo=`${ref} · Libre`;
+    if(oc.compartido){
+      // Dos (o más) personas DISTINTAS se reparten este puesto en la jornada (ej. una la mañana, otra la tarde).
+      ocupados++;
+      cls = oc.mio ? "mine" : "ocup"; tag="Compartido";
+      dis = oc.mio ? "" : "aria-disabled=\"true\"";
+      const detalle = oc.pares.map(p=> p.r ? `${p.r.ownerUid===me?"Vos":p.r.nombre} (${bloque(p.b).label})` : `Libre (${bloque(p.b).label})`);
+      who = oc.pares.map(p=> p.r ? (p.r.ownerUid===me?"Vos":p.r.nombre) : "Libre").join(" / ");
+      extra=`<span class="parcial">repartido</span>`;
+      titulo = `${ref} · Repartido: ${detalle.join(" · ")}`;
+    } else if(oc.ajeno || oc.mio){ ocupados++;
       const tomados = oc.ajeno ? oc.ajenoBloques : oc.mioBloques;
       const soloEn = parcial(tomados, oc.activos);
       if(oc.ajeno){ cls="ocup"; tag="Reservado"; who=oc.ajeno.nombre; dis="aria-disabled=\"true\""; }
       else { cls="mine"; tag="Tu lugar"; who=oc.mio.nombre; }
       if(soloEn){ extra=`<span class="parcial">solo ${soloEn}</span>`; }
+      const quien=oc.ajeno||oc.mio;
+      titulo = `${ref} · ${tag}${soloEn?` solo ${soloEn}`:""}: ${quien.nombre}${soloEn?` · Libre en ${libreEn(tomados, oc.activos)} (cambiá de turno)`:""}`;
     } else if(state.pending===s.id){ cls="pend"; tag="Elegida"; }
-    const ref=`OFIC. ${s.sala} · puesto ${s.label}`;
-    const quien=oc.ajeno||oc.mio;
-    const tomados2 = oc.ajeno ? oc.ajenoBloques : oc.mioBloques;
-    const soloEn2 = quien ? parcial(tomados2, oc.activos) : "";
-    const titulo = quien
-      ? `${ref} · ${tag}${soloEn2?` solo ${soloEn2}`:""}: ${quien.nombre}${soloEn2?` · Libre en ${libreEn(tomados2, oc.activos)} (cambiá de turno)`:""}`
-      : `${ref} · Libre`;
     return `<button class="seat ${cls}" data-seat="${s.id}" ${dis} title="${titulo}" aria-label="${titulo}">
       <span class="id">${s.label}</span>${who?`<span class="who">${who}</span>`:`<span class="tag">${tag}</span>`}${extra}</button>`;
   };
@@ -985,24 +1019,15 @@ async function confirmarReserva(){
   try{
     const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let diasOk=0, diasNo=0;
     for(const dia of dias){
-      // 0) Ese puesto puede estar bloqueado solo algunos días de la semana (ej. Lun-Mié). Si este día cae bloqueado, se salta.
+      // Ese puesto puede estar bloqueado solo algunos días de la semana (ej. Lun-Mié). Si este día cae bloqueado, se salta.
       if(bloqueadoEn(seatId, dia)){ diasNo++; continue; }
-      // 1) Traigo del SERVIDOR (no de la copia local, que puede estar desactualizada) mis reservas reales de ese día.
-      let misPrevias=[]; try{ misPrevias=await Store.misReservasDia(dia, me); }catch(e){ misPrevias=[]; }
-      const creados=[]; let fallo=false;
-      // 2) Intento reservar TODOS los turnos del día. Si uno falla, deshago los que hice.
-      for(const bid of turnos){
-        const rid=`${dia}__${seatId}__${bid}`;
-        try{ const nuevo=await Store.reservar(rid,{ fecha:dia, asiento:seatId, bloque:bid, nombre:state.nombre, ownerUid:me, creado:Date.now() });
-             if(nuevo!==false) creados.push(rid); }
-        catch(e){ fallo=true; break; }
-      }
-      if(fallo){ for(const rid of creados){ try{ await Store.cancelar(rid); }catch(e){} } diasNo++; continue; }
-      // 3) Recién con el día completo asegurado, libero TODAS mis sillas previas de esos turnos (dato fresco del servidor) y quito teletrabajo/campo.
-      for(const bid of turnos){
-        for(const r of misPrevias){ if(r.bloque===bid && r.asiento!==seatId){ try{ await Store.cancelar(r.id); }catch(e){} } }
-        try{ await Store.delAsist(`${dia}__${bid}__${me}`); }catch(e){}
-      }
+      // Reservo TODOS los turnos del día en UNA sola transacción atómica: o entra completo, o no entra nada.
+      // (Ya no hay un paso de "deshacer" separado que pueda fallar a mitad de camino.)
+      let res;
+      try{ res = await Store.reservarAtomico(dia, seatId, turnos, me, { fecha:dia, asiento:seatId, nombre:state.nombre, ownerUid:me, creado:Date.now() }); }
+      catch(e){ console.error(e); res={ ok:false }; }
+      if(!res || !res.ok){ diasNo++; continue; }
+      for(const bid of turnos){ try{ await Store.delAsist(`${dia}__${bid}__${me}`); }catch(e){} }
       diasOk++;
     }
     clearPending(); renderPlano(); renderJornada(); renderPanel();
@@ -1077,6 +1102,15 @@ $("zonas").addEventListener("click",e=>{
   if(b.dataset.block){ toast("Ese puesto no está disponible."); return; }
   if(miModalidad(state.bloque)!=="oficina"){ toast("Cambiá la modalidad a “Oficina” para reservar."); return; }
   const oc=ocupacion(seatId);
+  if(oc.compartido){
+    const detalle=oc.pares.map(p=> p.r ? `${p.r.ownerUid===state.uid?"vos":p.r.nombre} (${bloque(p.b).label})` : `libre (${bloque(p.b).label})`).join(" · ");
+    if(oc.mio){
+      const tarde=oc.mioBloques.some(bid=>!sePuedeCancelar(state.fecha,bid));
+      const aviso=tarde ? "\n\n⚠️ Cancelando con menos de 4 h de antelación: cuenta para el cupo de bizcochos del mes (a la 3ª, te toca traer)." : "";
+      if(confirm(`Este puesto está repartido: ${detalle}.\n\n¿Cancelar TU parte (${oc.mioBloques.map(b=>bloque(b).label).join(" y ")})?${aviso}`)) cancelar(seatId);
+    } else { toast(`${seatId} está repartido: ${detalle}.`); }
+    return;
+  }
   if(oc.ajeno){
     const soloEn=parcial(oc.ajenoBloques, oc.activos);
     toast(soloEn
