@@ -320,7 +320,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.3</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.4</b>
   </footer>
 </div>
 
@@ -593,18 +593,23 @@ function makeFirebaseStore(fs, db){
        o entra completo (turnos nuevos + libera lo previo del mismo día), o no entra nada.
        Sin pasos separados que puedan fallar a medio camino (por eso ya no hace falta "deshacer"). */
     async reservarAtomico(dia, seatId, turnos, uid, dataBase){
-      return await runTransaction(db, async (tx)=>{
-        // 1) LECTURAS primero (regla de Firestore: todas las lecturas antes que cualquier escritura).
+      // PASO 1 (ATÓMICO, solo con documentos puntuales conocidos — sin consultas adentro de la transacción,
+      // que es lo más simple y seguro que soporta Firestore): o entran TODOS los turnos del puesto nuevo, o ninguno.
+      const creado = await runTransaction(db, async (tx)=>{
         const refsNuevos = turnos.map(bid => doc(db,"reservas", `${dia}__${seatId}__${bid}`));
-        const snapsNuevos = []; for(const ref of refsNuevos){ snapsNuevos.push(await tx.get(ref)); }
-        for(const snap of snapsNuevos){ if(snap.exists() && snap.data().ownerUid!==uid) return { ok:false }; }
-        const misSnap = await tx.get(query(collection(db,"reservas"), where("fecha","==",dia), where("ownerUid","==",uid)));
-        const misDocs=[]; misSnap.forEach(d=>misDocs.push({ ref:d.ref, bloque:d.data().bloque, asiento:d.data().asiento }));
-        // 2) ESCRITURAS (recién acá, ya con todo verificado): creo los turnos nuevos y libero mis sillas previas de esos mismos turnos.
+        const snaps=[]; for(const ref of refsNuevos){ snaps.push(await tx.get(ref)); }
+        for(const snap of snaps){ if(snap.exists() && snap.data().ownerUid!==uid) return false; }
         refsNuevos.forEach((ref,i)=> tx.set(ref, Object.assign({}, dataBase, { bloque:turnos[i] })));
-        for(const bid of turnos){ for(const m of misDocs){ if(m.bloque===bid && m.asiento!==seatId){ tx.delete(m.ref); } } }
-        return { ok:true };
+        return true;
       });
+      if(!creado) return { ok:false };
+      // PASO 2 (aparte, best-effort): libero mi silla anterior de esos mismos turnos, con dato fresco del servidor.
+      try{
+        const misSnap=await getDocsFromServer(query(collection(db,"reservas"), where("fecha","==",dia), where("ownerUid","==",uid)));
+        const misDocs=[]; misSnap.forEach(d=>{ const r=d.data(); if(r.asiento!==seatId) misDocs.push({ id:d.id, bloque:r.bloque }); });
+        for(const bid of turnos){ for(const m of misDocs){ if(m.bloque===bid){ try{ await deleteDoc(doc(db,"reservas", m.id)); }catch(e){} } } }
+      }catch(e){ console.error("No se pudo liberar la silla anterior:", e); }
+      return { ok:true };
     },
   };
 }
@@ -1017,23 +1022,26 @@ async function confirmarReserva(){
   state._reservando=true;
   const btnC=$("btnConfirmar"); if(btnC){ btnC.disabled=true; btnC.textContent="Reservando…"; }
   try{
-    const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let diasOk=0, diasNo=0;
+    const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let diasOk=0, diasNo=0, hayErrorTecnico=false;
     for(const dia of dias){
       // Ese puesto puede estar bloqueado solo algunos días de la semana (ej. Lun-Mié). Si este día cae bloqueado, se salta.
       if(bloqueadoEn(seatId, dia)){ diasNo++; continue; }
-      // Reservo TODOS los turnos del día en UNA sola transacción atómica: o entra completo, o no entra nada.
-      // (Ya no hay un paso de "deshacer" separado que pueda fallar a mitad de camino.)
+      // Reservo TODOS los turnos del día en una transacción atómica: o entra completo, o no entra nada.
       let res;
       try{ res = await Store.reservarAtomico(dia, seatId, turnos, me, { fecha:dia, asiento:seatId, nombre:state.nombre, ownerUid:me, creado:Date.now() }); }
-      catch(e){ console.error(e); res={ ok:false }; }
+      catch(e){ console.error("Error reservando:", e); res={ ok:false }; hayErrorTecnico=true; }
       if(!res || !res.ok){ diasNo++; continue; }
       for(const bid of turnos){ try{ await Store.delAsist(`${dia}__${bid}__${me}`); }catch(e){} }
       diasOk++;
     }
     clearPending(); renderPlano(); renderJornada(); renderPanel();
-    toast(diasOk
-      ? `Reservado ${seatId} · ${etiquetaTurno()} · ${diasOk} día(s)${diasNo?` · ${diasNo} día(s) no disponible(s)`:""}.`
-      : `${seatId} no está disponible ${state.ambos?"en alguno de los turnos":"para esos días"}.`);
+    if(hayErrorTecnico && !diasOk){
+      toast("⚠️ Hubo un problema técnico al reservar. Reintentá en un momento; si sigue, avisale a Rocío.");
+    } else {
+      toast(diasOk
+        ? `Reservado ${seatId} · ${etiquetaTurno()} · ${diasOk} día(s)${diasNo?` · ${diasNo} día(s) no disponible(s)`:""}.`
+        : `${seatId} no está disponible ${state.ambos?"en alguno de los turnos":"para esos días"}.`);
+    }
   } finally { state._reservando=false; }
 }
 function iniciarModalidad(mod){
