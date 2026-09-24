@@ -317,10 +317,18 @@
       </div>
       <div id="histBody" class="hist-body"></div>
     </section>
+
+    <section class="card" id="gestionCard" hidden>
+      <div class="plano-head">
+        <span class="plano-title">🔧 Anotaciones sin deuda (admin)</span>
+      </div>
+      <div class="hint">Cancelaciones/inasistencias que todavía no llegaron a la 3ª del mes, por eso no aparecen arriba en "Deben bizcochos". Si anotaste algo por error, justificalo acá.</div>
+      <div id="gestionList" class="biz-list"></div>
+    </section>
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.4</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.5</b>
   </footer>
 </div>
 
@@ -900,7 +908,7 @@ function renderHistorial(){
   const justificadas=delMesTodo.filter(b=>b.justificado).length;
   const delMes=delMesTodo.filter(b=>!b.justificado);
   const notaJust = justificadas ? `<div class="hist-just">🤒 ${justificadas} justificada(s) — no cuentan (enfermedad o imprevisto).</div>` : "";
-  if(!delMes.length){ body.innerHTML=`<div class="hist-empty">Sin registros este mes 🎉</div>${notaJust}`; return; }
+  if(!delMes.length){ body.innerHTML=`<div class="hist-empty">Sin registros este mes 🎉</div>${notaJust}`; renderGestion(); return; }
   const porPersona={};
   for(const b of delMes){ const k=b.ownerUid||b.nombre;
     if(!porPersona[k]) porPersona[k]={nombre:b.nombre, tarde:0, noshow:0, pend:0};
@@ -919,6 +927,24 @@ function renderHistorial(){
           ${p.pend?`<span class="htag p">${p.pend} sin traer 🥐</span>`:""}
         </span>
       </div>`).join("") + notaJust;
+  renderGestion();
+}
+function renderGestion(){
+  const wrap=$("gestionCard"), cont=$("gestionList"); if(!wrap||!cont) return;
+  const admin=soyAdmin(); wrap.hidden=!admin; if(!admin) return;
+  const items=(state.bizcochos||[]).filter(b=> mesDe(b)===state.histMes && !b.justificado && b.debita===false);
+  if(!items.length){ cont.innerHTML=`<div class="biz-empty">No hay anotaciones sin deuda este mes.</div>`; return; }
+  cont.innerHTML = items.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).map(b=>{
+    const d=new Date((b.fecha||"")+"T00:00:00");
+    const cuando=isNaN(d.getTime())?"":`${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
+    const blab=bloque(b.bloque)?bloque(b.bloque).label:"";
+    const meta=[cuando,blab,b.motivo||(tipoDe(b)==="tarde"?"canceló tarde":"no vino")].filter(Boolean).join(" · ");
+    const id=b.id || `${b.fecha}__${b.bloque}__${b.ownerUid}`;
+    return `<div class="biz-row">
+      <div class="biz-info"><span class="biz-name">${b.nombre}</span>
+        <span class="biz-meta">${meta}</span></div>
+      <button class="btn ghost tiny" data-just="${id}">🤒 Justificar</button></div>`;
+  }).join("");
 }
 function abrirAnotar(){
   if(!soyAdmin()) return;
@@ -1093,18 +1119,23 @@ $("modalidad").addEventListener("click",e=>{ const b=e.target.closest("button");
 });
 $("histMes").addEventListener("change",e=>{ state.histMes=e.target.value; renderHistorial(); });
 $("bizActions").addEventListener("click",e=>{ if(e.target.closest("#btnAnotar")) abrirAnotar(); });
+async function justificarBizcocho(id){
+  const rec=(state.bizcochos||[]).find(x=>(x.id||`${x.fecha}__${x.bloque}__${x.ownerUid}`)===id); if(!rec) return;
+  const razon=prompt(`Justificar a ${rec.nombre} (no cuenta en el historial ni en su reincidencia).\n\nMotivo:`, "anotado por error");
+  if(razon===null) return;
+  try{ await Store.addBizcocho(id, Object.assign({}, rec, { id, justificado:true, motivoJust:(razon||"").trim()||"imprevisto", justTs:Date.now() })); }catch(err){}
+}
 $("bizList").addEventListener("click",e=>{
   if(!soyAdmin()) return;
-  const j=e.target.closest("[data-just]");
-  if(j){ const rec=(state.bizcochos||[]).find(x=>(x.id||`${x.fecha}__${x.bloque}__${x.ownerUid}`)===j.dataset.just); if(!rec) return;
-    const razon=prompt(`Justificar a ${rec.nombre} (no le corresponden bizcochos).\n\nMotivo:`, "enfermedad / imprevisto");
-    if(razon===null) return;
-    try{ Store.addBizcocho(j.dataset.just, Object.assign({}, rec, { id:j.dataset.just, justificado:true, motivoJust:(razon||"").trim()||"imprevisto", justTs:Date.now() })); }catch(err){}
-    return; }
+  const j=e.target.closest("[data-just]"); if(j){ justificarBizcocho(j.dataset.just); return; }
   const b=e.target.closest("[data-biz]"); if(!b) return;
   const rec=(state.bizcochos||[]).find(x=>(x.id||`${x.fecha}__${x.bloque}__${x.ownerUid}`)===b.dataset.biz); if(!rec) return;
   if(confirm("¿Marcar que ya trajo los bizcochos? Sale de la lista de pendientes, pero queda en el historial.")){
     try{ Store.addBizcocho(b.dataset.biz, Object.assign({}, rec, { id:b.dataset.biz, pagado:true, pagadoTs:Date.now() })); }catch(err){} } });
+$("gestionList").addEventListener("click",e=>{
+  if(!soyAdmin()) return;
+  const j=e.target.closest("[data-just]"); if(j) justificarBizcocho(j.dataset.just);
+});
 $("zonas").addEventListener("click",e=>{
   const b=e.target.closest(".seat"); if(!b) return; const seatId=b.dataset.seat;
   if(b.dataset.block){ toast("Ese puesto no está disponible."); return; }
