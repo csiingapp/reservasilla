@@ -192,6 +192,18 @@
   .turno-mini{border:1.5px solid var(--line); border-radius:20px; padding:6px 14px; font:inherit; font-size:.85rem; font-weight:600; background:#fff; color:var(--ink); cursor:pointer}
   .turno-mini[aria-pressed="true"]{background:var(--brand); border-color:var(--brand); color:#fff}
 
+  .histdia-sep{border-top:1px solid var(--line); margin:18px 0 14px}
+  .histsem-controls{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .histsem-label{font-family:"Archivo"; font-weight:700; font-size:.88rem; color:var(--ink)}
+  .histsem-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-top:12px}
+  @media(max-width:900px){ .histsem-grid{grid-template-columns:1fr 1fr} }
+  @media(max-width:560px){ .histsem-grid{grid-template-columns:1fr} }
+  .semday{border:1.5px solid var(--line); border-radius:11px; padding:10px 11px; background:#fcfdfe}
+  .semday-h{font-family:"Archivo"; font-weight:700; font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; margin-bottom:7px; color:var(--ink)}
+  .semday-row{font-size:.78rem; color:var(--muted); line-height:1.5; margin-bottom:3px}
+  .semday-row b{color:var(--ink); font-family:"Archivo"}
+  .semday-row.of b{color:#15843b} .semday-row.te b{color:#6b7480} .semday-row.ca b{color:#a15b1a}
+
   .biz-list{margin-top:12px; display:flex; flex-direction:column; gap:8px}
   .biz-empty{color:var(--muted); font-size:.9rem; padding:4px 0}
   .biz-row{display:flex; align-items:center; gap:10px; justify-content:space-between; padding:10px 12px; border:1.5px solid #f3d2d2; background:#fff8f8; border-radius:11px}
@@ -207,7 +219,12 @@
   .hist-body{margin-top:12px}
   .hist-empty{color:var(--muted); font-size:.9rem; padding:4px 0}
   .hist-tot{color:var(--muted); font-size:.82rem; margin-bottom:10px}
-  .hist-row{display:flex; align-items:center; gap:10px; padding:9px 12px; border:1.5px solid var(--line); border-radius:11px; background:#fcfdfe; margin-bottom:8px}
+  .hist-row{display:flex; align-items:center; gap:10px; padding:9px 12px; border:1.5px solid var(--line); border-radius:11px; background:#fcfdfe; margin-bottom:8px; cursor:pointer; user-select:none}
+  .hist-row:hover{border-color:var(--brand)}
+  .hist-chev{color:var(--muted); font-size:.7rem; margin-left:2px}
+  .hist-detail{margin:-4px 0 10px 34px; padding:8px 12px; background:var(--paper); border:1px solid var(--line); border-radius:10px}
+  .hist-det-row{display:flex; justify-content:space-between; gap:10px; font-size:.82rem; padding:3px 0; color:var(--ink)}
+  .hist-det-estado{color:var(--muted); font-weight:600; white-space:nowrap}
   .hist-pos{flex:0 0 auto; width:24px; height:24px; border-radius:50%; background:var(--paper); border:1px solid var(--line); color:var(--muted);
     font-family:"Archivo"; font-weight:700; font-size:.78rem; display:flex; align-items:center; justify-content:center}
   .hist-row.top .hist-pos{background:var(--brand); border-color:var(--brand); color:#fff}
@@ -346,11 +363,24 @@
         </div>
       </div>
       <div id="histDiaBody" class="panel-cols"></div>
+
+      <div class="histdia-sep"></div>
+      <div class="plano-title" style="margin-bottom:8px">📅 Resumen semanal</div>
+      <div class="histsem-controls">
+        <button id="histSemPrev" class="btn ghost tiny">◀ Semana anterior</button>
+        <span id="histSemLabel" class="histsem-label"></span>
+        <button id="histSemNext" class="btn ghost tiny">Semana siguiente ▶</button>
+      </div>
+      <div class="histdia-turnos" style="margin-top:8px">
+        <button class="turno-mini" data-bt2="AM" aria-pressed="true">Mañana</button>
+        <button class="turno-mini" data-bt2="PM" aria-pressed="false">Tarde</button>
+      </div>
+      <div id="histSemBody" class="histsem-grid"></div>
     </section>
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.6</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.7</b>
   </footer>
 </div>
 
@@ -499,7 +529,7 @@ function niceName(email){ const lp=(email||"").split("@")[0];
 const state = {
   uid:null, email:"", nombre:"", mode:"local", authError:null, _demoExtra:"",
   fecha:null, bloque:CONFIG.bloques[0].id, ambos:true,
-  reservas:{}, asistencia:{}, bizcochos:[], histMes:null, histDiaTurno:"AM", pending:null, pendingMod:null, diasSel:new Set(),
+  reservas:{}, asistencia:{}, bizcochos:[], histMes:null, histExpand:null, histDiaTurno:"AM", pending:null, pendingMod:null, diasSel:new Set(),
 };
 const bloquesActivos=()=> state.ambos ? CONFIG.bloques.map(b=>b.id) : [state.bloque];
 /* Ocupación de una silla considerando TODOS los turnos activos (clave para "Jornada completa") */
@@ -587,6 +617,10 @@ const LocalStore = {
     return { reservas: Object.values(this.res).filter(r=>r.fecha===fecha),
              asistencia: Object.values(this.asist).filter(a=>a.fecha===fecha) };
   },
+  async getSemanaCompleta(lunFecha, vieFecha){
+    return { reservas: Object.values(this.res).filter(r=>r.fecha>=lunFecha && r.fecha<=vieFecha),
+             asistencia: Object.values(this.asist).filter(a=>a.fecha>=lunFecha && a.fecha<=vieFecha) };
+  },
 };
 LocalStore.init();
 window.addEventListener("storage",()=>{ if(Store===LocalStore){ LocalStore.init(); LocalStore._emit(); LocalStore._emitBiz(); }});
@@ -650,6 +684,16 @@ function makeFirebaseStore(fs, db){
       const [rSnap,aSnap]=await Promise.all([
         getDocs(query(collection(db,"reservas"), where("fecha","==",fecha))),
         getDocs(query(collection(db,"asistencia"), where("fecha","==",fecha))),
+      ]);
+      const reservas=[]; rSnap.forEach(d=>reservas.push(d.data()));
+      const asistencia=[]; aSnap.forEach(d=>asistencia.push(d.data()));
+      return { reservas, asistencia };
+    },
+    /* Rango de fechas (un solo campo, >= y <=): no necesita índice compuesto, es una consulta simple. */
+    async getSemanaCompleta(lunFecha, vieFecha){
+      const [rSnap,aSnap]=await Promise.all([
+        getDocs(query(collection(db,"reservas"), where("fecha",">=",lunFecha), where("fecha","<=",vieFecha))),
+        getDocs(query(collection(db,"asistencia"), where("fecha",">=",lunFecha), where("fecha","<=",vieFecha))),
       ]);
       const reservas=[]; rSnap.forEach(d=>reservas.push(d.data()));
       const asistencia=[]; aSnap.forEach(d=>asistencia.push(d.data()));
@@ -790,6 +834,7 @@ function mostrarApp(){
   $("picker").hidden=true; $("appwrap").hidden=false;
   $("userbar").hidden=false; $("userEmail").textContent=state.nombre||state.email||"";
   renderModeNote(); renderAll(); subscribe(); subscribeBizcochos();
+  if(soyAdmin()) cargarResumenSemanal();
 }
 function setLoginMsg(t,cls){ const m=$("loginMsg"); if(!m) return; m.textContent=t; m.className="msg"+(cls?" "+cls:""); }
 
@@ -947,22 +992,36 @@ function renderHistorial(){
   if(!delMes.length){ body.innerHTML=`<div class="hist-empty">Sin registros este mes 🎉</div>${notaJust}`; renderGestion(); return; }
   const porPersona={};
   for(const b of delMes){ const k=b.ownerUid||b.nombre;
-    if(!porPersona[k]) porPersona[k]={nombre:b.nombre, tarde:0, noshow:0, pend:0};
-    const p=porPersona[k]; tipoDe(b)==="tarde" ? p.tarde++ : p.noshow++; if(!b.pagado && b.debita!==false) p.pend++; }
+    if(!porPersona[k]) porPersona[k]={key:k, nombre:b.nombre, tarde:0, noshow:0, pend:0, registros:[]};
+    const p=porPersona[k]; tipoDe(b)==="tarde" ? p.tarde++ : p.noshow++; if(!b.pagado && b.debita!==false) p.pend++;
+    p.registros.push(b); }
   const rank=Object.values(porPersona).map(p=>Object.assign(p,{total:p.tarde+p.noshow}))
     .sort((a,b)=> b.total-a.total || a.nombre.localeCompare(b.nombre,"es"));
   const tT=rank.reduce((s,p)=>s+p.tarde,0), tN=rank.reduce((s,p)=>s+p.noshow,0);
+  const detalleDe=(p)=>{
+    if(state.histExpand!==p.key) return "";
+    const filas=p.registros.slice().sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")).map(r=>{
+      const d=new Date((r.fecha||"")+"T00:00:00");
+      const cuando=isNaN(d.getTime())?(r.fecha||""):`${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
+      const blab=bloque(r.bloque)?bloque(r.bloque).label:"";
+      const tipoLbl=tipoDe(r)==="tarde"?"canceló tarde":"no vino";
+      const estado = r.pagado ? "✓ pagado" : (r.debita===false ? "sin deuda (no llegó a la 3ª)" : "pendiente 🥐");
+      return `<div class="hist-det-row"><span>${cuando}${blab?` · ${blab}`:""} · ${tipoLbl}</span><span class="hist-det-estado">${estado}</span></div>`;
+    }).join("");
+    return `<div class="hist-detail">${filas}</div>`;
+  };
   body.innerHTML=`<div class="hist-tot">${rank.length} persona(s) · ${tT} cancelación(es) tardía(s) · ${tN} incumplimiento(s)</div>`+
     rank.map((p,i)=>`
-      <div class="hist-row${i===0&&p.total>1?" top":""}">
+      <div class="hist-row${i===0&&p.total>1?" top":""}" data-hk="${p.key}">
         <span class="hist-pos">${i+1}</span>
         <span class="hist-nm">${p.nombre}</span>
         <span class="hist-tags">
           ${p.tarde?`<span class="htag t">${p.tarde} tarde</span>`:""}
           ${p.noshow?`<span class="htag n">${p.noshow} no vino</span>`:""}
           ${p.pend?`<span class="htag p">${p.pend} sin traer 🥐</span>`:""}
+          <span class="hist-chev">${state.histExpand===p.key?"▾":"▸"}</span>
         </span>
-      </div>`).join("") + notaJust;
+      </div>${detalleDe(p)}`).join("") + notaJust;
   renderGestion();
 }
 function renderGestion(){
@@ -1005,6 +1064,31 @@ async function cargarHistorialDia(){
     col("of","En oficina", oficina, x=>`<li><span>${x.nombre}</span><span class="seat-n">${x.seat}</span></li>`) +
     col("te","Teletrabajo", tele, x=>`<li><span>${x.nombre}</span></li>`) +
     col("ca","Campo", campo, x=>`<li><span>${x.nombre}</span></li>`);
+}
+const mondayOf=(d)=>{ const x=new Date(d); x.setHours(0,0,0,0); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; };
+async function cargarResumenSemanal(){
+  const body=$("histSemBody"), label=$("histSemLabel"); if(!body||!label || !soyAdmin()) return;
+  if(!state.histSemMonday) state.histSemMonday = ymd(mondayOf(new Date()));
+  const lun=new Date(state.histSemMonday+"T00:00:00"); const vie=new Date(lun); vie.setDate(lun.getDate()+4);
+  label.textContent = `${lun.getDate()} ${MON[lun.getMonth()]} – ${vie.getDate()} ${MON[vie.getMonth()]} ${vie.getFullYear()}`;
+  body.innerHTML = `<div class="hist-empty">Buscando…</div>`;
+  let data; try{ data = await Store.getSemanaCompleta(ymd(lun), ymd(vie)); }
+  catch(e){ console.error(e); body.innerHTML = `<div class="hist-empty">No se pudo cargar. Reintentá.</div>`; return; }
+  const bid = state.histSemTurno||"AM";
+  const dias=[0,1,2,3,4].map(i=>{ const d=new Date(lun); d.setDate(lun.getDate()+i); return d; });
+  body.innerHTML = dias.map(d=>{
+    const k=ymd(d);
+    const oficina=(data.reservas||[]).filter(r=>r.fecha===k && r.bloque===bid).map(r=>`${r.nombre} (${r.asiento})`);
+    const asis=(data.asistencia||[]).filter(a=>a.fecha===k && a.bloque===bid);
+    const tele=asis.filter(a=>a.modalidad==="teletrabajo").map(a=>a.nombre);
+    const campo=asis.filter(a=>a.modalidad==="campo").map(a=>a.nombre);
+    return `<div class="semday">
+      <div class="semday-h">${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}</div>
+      <div class="semday-row of"><b>${oficina.length}</b> oficina${oficina.length?`: ${oficina.join(", ")}`:""}</div>
+      <div class="semday-row te"><b>${tele.length}</b> teletrabajo${tele.length?`: ${tele.join(", ")}`:""}</div>
+      <div class="semday-row ca"><b>${campo.length}</b> campo${campo.length?`: ${campo.join(", ")}`:""}</div>
+    </div>`;
+  }).join("");
 }
 function abrirAnotar(){
   if(!soyAdmin()) return;
@@ -1178,13 +1262,22 @@ $("modalidad").addEventListener("click",e=>{ const b=e.target.closest("button");
   } else { iniciarModalidad(m); }
 });
 $("histMes").addEventListener("change",e=>{ state.histMes=e.target.value; renderHistorial(); });
+$("histBody").addEventListener("click",e=>{ const row=e.target.closest(".hist-row"); if(!row) return;
+  const k=row.dataset.hk; state.histExpand = (state.histExpand===k) ? null : k; renderHistorial(); });
 $("histFecha").max = ymd(new Date());
 $("histFecha").addEventListener("change", cargarHistorialDia);
-$("histDiaCard").addEventListener("click",e=>{ const b=e.target.closest(".turno-mini"); if(!b) return;
-  state.histDiaTurno=b.dataset.bt;
-  $("histDiaCard").querySelectorAll(".turno-mini").forEach(x=>x.setAttribute("aria-pressed", x===b));
-  cargarHistorialDia();
+$("histDiaCard").addEventListener("click",e=>{
+  const b1=e.target.closest("[data-bt]");
+  if(b1){ state.histDiaTurno=b1.dataset.bt;
+    b1.closest(".histdia-turnos").querySelectorAll("[data-bt]").forEach(x=>x.setAttribute("aria-pressed", x===b1));
+    cargarHistorialDia(); return; }
+  const b2=e.target.closest("[data-bt2]");
+  if(b2){ state.histSemTurno=b2.dataset.bt2;
+    b2.closest(".histdia-turnos").querySelectorAll("[data-bt2]").forEach(x=>x.setAttribute("aria-pressed", x===b2));
+    cargarResumenSemanal(); return; }
 });
+$("histSemPrev").addEventListener("click",()=>{ const d=new Date(state.histSemMonday+"T00:00:00"); d.setDate(d.getDate()-7); state.histSemMonday=ymd(d); cargarResumenSemanal(); });
+$("histSemNext").addEventListener("click",()=>{ const d=new Date(state.histSemMonday+"T00:00:00"); d.setDate(d.getDate()+7); state.histSemMonday=ymd(d); cargarResumenSemanal(); });
 $("bizActions").addEventListener("click",e=>{ if(e.target.closest("#btnAnotar")) abrirAnotar(); });
 async function justificarBizcocho(id){
   const rec=(state.bizcochos||[]).find(x=>(x.id||`${x.fecha}__${x.bloque}__${x.ownerUid}`)===id); if(!rec) return;
