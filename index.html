@@ -380,7 +380,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.10</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.8</b>
   </footer>
 </div>
 
@@ -498,27 +498,9 @@ const BLOQUEADOS_DIAS = [
   { id:"112-07", dias:[1,2,3] },  // Lun–Mié bloqueado; libre Jue y Vie
   { id:"112-12", dias:[1,2,3] },  // Lun–Mié bloqueado; libre Jue y Vie
 ];
-
-/* Puestos bloqueados SOLO en fecha(s) puntuales (libres cualquier otro día). fechas: "AAAA-MM-DD".
-   Para agregar otro bloque: { ids:["SALA-NN",...], fechas:["AAAA-MM-DD",...] }. Para sacar uno, borrá su línea. */
-const BLOQUEADOS_FECHAS = [
-  { ids:["113-01","113-02","113-03","113-04","113-07","113-09","113-12"], fechas:["2026-10-16"] },
-];
 const diaSemana = (fecha)=> new Date(`${fecha}T00:00:00`).getDay();
-/* Chequeo combinado (fijo + por día + por fecha puntual) para una fecha dada. Sin fecha, cae a la fecha actualmente elegida.
-   Este es el chequeo REAL (el que de verdad impide reservar). */
+/* Chequeo combinado (fijo + por día) para una fecha dada. Sin fecha, cae a la fecha actualmente elegida. */
 function bloqueadoEn(id, fecha){
-  if(esBloqueado(id)) return true;
-  const dia = fecha || state.fecha;
-  const regla=BLOQUEADOS_DIAS.find(b=>b.id===id);
-  if(regla && regla.dias.includes(diaSemana(dia))) return true;
-  return BLOQUEADOS_FECHAS.some(b=> b.ids.includes(id) && b.fechas.includes(dia));
-}
-/* Chequeo SOLO para el rayado + cartel "No disp." (bloqueos permanentes y por día de semana).
-   Los bloqueos por fecha puntual (BLOQUEADOS_FECHAS) a propósito NO entran acá: ese puesto se
-   ve igual que uno libre, simplemente no se puede elegir (bloqueadoEn se sigue chequeando al tocarlo
-   y al confirmar la reserva). */
-function bloqueadoVisible(id, fecha){
   if(esBloqueado(id)) return true;
   const regla=BLOQUEADOS_DIAS.find(b=>b.id===id);
   return regla ? regla.dias.includes(diaSemana(fecha || state.fecha)) : false;
@@ -891,7 +873,7 @@ function renderPlano(){
   $("zonas").classList.toggle("locked", bloqueado);
   let ocupados=0;
   const seatHTML=(s)=>{
-    if(bloqueadoVisible(s.id, state.fecha)){
+    if(bloqueadoEn(s.id, state.fecha)){
       const refb=`OFIC. ${s.sala} · puesto ${s.label}`;
       const regla = !esBloqueado(s.id) ? BLOQUEADOS_DIAS.find(b=>b.id===s.id) : null;
       const diasTxt = regla ? regla.dias.map(d=>DOW[d]).join("-") : "";
@@ -921,11 +903,6 @@ function renderPlano(){
       const quien=oc.ajeno||oc.mio;
       titulo = `${ref} · ${tag}${soloEn?` solo ${soloEn}`:""}: ${quien.nombre}${soloEn?` · Libre en ${libreEn(tomados, oc.activos)} (cambiá de turno)`:""}`;
     } else if(state.pending===s.id){ cls="pend"; tag="Elegida"; }
-    else if(bloqueadoEn(s.id, state.fecha)){
-      // Bloqueo puntual por fecha (ej. 16/10): a propósito se ve IGUAL que un puesto libre
-      // (mismo estilo, mismo "Libre"), pero no se puede elegir. Ver bloqueadoVisible() arriba.
-      dis = 'data-block="1"';
-    }
     return `<button class="seat ${cls}" data-seat="${s.id}" ${dis} title="${titulo}" aria-label="${titulo}">
       <span class="id">${s.label}</span>${who?`<span class="who">${who}</span>`:`<span class="tag">${tag}</span>`}${extra}</button>`;
   };
@@ -936,7 +913,7 @@ function renderPlano(){
     return `<div class="sala"><div class="sala-lbl">${s.nombre}</div><div class="pods">${pods}</div></div>`;
   }).join("");
   $("zonas").innerHTML=`<div class="planta">${planta}</div>`;
-  const usables=ASIENTOS.filter(a=>!bloqueadoVisible(a.id, state.fecha)).length, libres=usables-ocupados;
+  const usables=ASIENTOS.filter(a=>!bloqueadoEn(a.id, state.fecha)).length, libres=usables-ocupados;
   $("occ").innerHTML=`<b>${libres}</b> libres de <b>${usables}</b> · ${etiquetaTurno()}`;
   const banner=$("banner");
   if(bloqueado){ banner.className="banner lock show";
@@ -1239,7 +1216,7 @@ async function confirmarReserva(){
   try{
     const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let diasOk=0, diasNo=0, hayErrorTecnico=false;
     for(const dia of dias){
-      // Ese puesto puede estar bloqueado solo algunos días de la semana (ej. Lun-Mié) o en una fecha puntual. Si este día cae bloqueado, se salta.
+      // Ese puesto puede estar bloqueado solo algunos días de la semana (ej. Lun-Mié). Si este día cae bloqueado, se salta.
       if(bloqueadoEn(seatId, dia)){ diasNo++; continue; }
       // Reservo TODOS los turnos del día en una transacción atómica: o entra completo, o no entra nada.
       let res;
