@@ -380,7 +380,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.7</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.10</b>
   </footer>
 </div>
 
@@ -498,9 +498,27 @@ const BLOQUEADOS_DIAS = [
   { id:"112-07", dias:[1,2,3] },  // Lun–Mié bloqueado; libre Jue y Vie
   { id:"112-12", dias:[1,2,3] },  // Lun–Mié bloqueado; libre Jue y Vie
 ];
+
+/* Puestos bloqueados SOLO en fecha(s) puntuales (libres cualquier otro día). fechas: "AAAA-MM-DD".
+   Para agregar otro bloque: { ids:["SALA-NN",...], fechas:["AAAA-MM-DD",...] }. Para sacar uno, borrá su línea. */
+const BLOQUEADOS_FECHAS = [
+  { ids:["113-01","113-02","113-03","113-04","113-07","113-09","113-12"], fechas:["2026-10-16"] },
+];
 const diaSemana = (fecha)=> new Date(`${fecha}T00:00:00`).getDay();
-/* Chequeo combinado (fijo + por día) para una fecha dada. Sin fecha, cae a la fecha actualmente elegida. */
+/* Chequeo combinado (fijo + por día + por fecha puntual) para una fecha dada. Sin fecha, cae a la fecha actualmente elegida.
+   Este es el chequeo REAL (el que de verdad impide reservar). */
 function bloqueadoEn(id, fecha){
+  if(esBloqueado(id)) return true;
+  const dia = fecha || state.fecha;
+  const regla=BLOQUEADOS_DIAS.find(b=>b.id===id);
+  if(regla && regla.dias.includes(diaSemana(dia))) return true;
+  return BLOQUEADOS_FECHAS.some(b=> b.ids.includes(id) && b.fechas.includes(dia));
+}
+/* Chequeo SOLO para el rayado + cartel "No disp." (bloqueos permanentes y por día de semana).
+   Los bloqueos por fecha puntual (BLOQUEADOS_FECHAS) a propósito NO entran acá: ese puesto se
+   ve igual que uno libre, simplemente no se puede elegir (bloqueadoEn se sigue chequeando al tocarlo
+   y al confirmar la reserva). */
+function bloqueadoVisible(id, fecha){
   if(esBloqueado(id)) return true;
   const regla=BLOQUEADOS_DIAS.find(b=>b.id===id);
   return regla ? regla.dias.includes(diaSemana(fecha || state.fecha)) : false;
@@ -873,7 +891,7 @@ function renderPlano(){
   $("zonas").classList.toggle("locked", bloqueado);
   let ocupados=0;
   const seatHTML=(s)=>{
-    if(bloqueadoEn(s.id, state.fecha)){
+    if(bloqueadoVisible(s.id, state.fecha)){
       const refb=`OFIC. ${s.sala} · puesto ${s.label}`;
       const regla = !esBloqueado(s.id) ? BLOQUEADOS_DIAS.find(b=>b.id===s.id) : null;
       const diasTxt = regla ? regla.dias.map(d=>DOW[d]).join("-") : "";
@@ -903,6 +921,11 @@ function renderPlano(){
       const quien=oc.ajeno||oc.mio;
       titulo = `${ref} · ${tag}${soloEn?` solo ${soloEn}`:""}: ${quien.nombre}${soloEn?` · Libre en ${libreEn(tomados, oc.activos)} (cambiá de turno)`:""}`;
     } else if(state.pending===s.id){ cls="pend"; tag="Elegida"; }
+    else if(bloqueadoEn(s.id, state.fecha)){
+      // Bloqueo puntual por fecha (ej. 16/10): a propósito se ve IGUAL que un puesto libre
+      // (mismo estilo, mismo "Libre"), pero no se puede elegir. Ver bloqueadoVisible() arriba.
+      dis = 'data-block="1"';
+    }
     return `<button class="seat ${cls}" data-seat="${s.id}" ${dis} title="${titulo}" aria-label="${titulo}">
       <span class="id">${s.label}</span>${who?`<span class="who">${who}</span>`:`<span class="tag">${tag}</span>`}${extra}</button>`;
   };
@@ -913,7 +936,7 @@ function renderPlano(){
     return `<div class="sala"><div class="sala-lbl">${s.nombre}</div><div class="pods">${pods}</div></div>`;
   }).join("");
   $("zonas").innerHTML=`<div class="planta">${planta}</div>`;
-  const usables=ASIENTOS.filter(a=>!bloqueadoEn(a.id, state.fecha)).length, libres=usables-ocupados;
+  const usables=ASIENTOS.filter(a=>!bloqueadoVisible(a.id, state.fecha)).length, libres=usables-ocupados;
   $("occ").innerHTML=`<b>${libres}</b> libres de <b>${usables}</b> · ${etiquetaTurno()}`;
   const banner=$("banner");
   if(bloqueado){ banner.className="banner lock show";
@@ -976,7 +999,12 @@ const mesDe=(b)=> (b.fecha||"").slice(0,7);
 const tipoDe=(b)=> b.tipo || (/cancel/i.test(b.motivo||"") ? "tarde" : "noshow");
 /* Reincidencia: cuenta cancelaciones tardías + no-shows del mes (sin contar justificadas).
    Cada 3ra vez (3,6,9…) se marca "debita:true" y recién ahí genera una deuda de bizcochos real. */
-const contarStrikes = (email, mes) => (state.bizcochos||[]).filter(b=> b.ownerUid===email && mesDe(b)===mes && !b.justificado).length;
+/* Cuenta EVENTOS distintos (día+tipo), no documentos sueltos: cancelar jornada completa de una
+   vez (mañana+tarde) es UNA falta, no dos, aunque por dentro haya quedado más de un registro. */
+const contarStrikes = (email, mes) => {
+  const regs=(state.bizcochos||[]).filter(b=> b.ownerUid===email && mesDe(b)===mes && !b.justificado);
+  return new Set(regs.map(b=>`${b.fecha}__${tipoDe(b)}`)).size;
+};
 function renderHistorial(){
   const sel=$("histMes"), body=$("histBody"); if(!sel||!body) return;
   const todos=(state.bizcochos||[]).filter(b=>mesDe(b));
@@ -990,22 +1018,34 @@ function renderHistorial(){
   const delMes=delMesTodo.filter(b=>!b.justificado);
   const notaJust = justificadas ? `<div class="hist-just">🤒 ${justificadas} justificada(s) — no cuentan (enfermedad o imprevisto).</div>` : "";
   if(!delMes.length){ body.innerHTML=`<div class="hist-empty">Sin registros este mes 🎉</div>${notaJust}`; renderGestion(); return; }
+  // Agrupo en EVENTOS (persona + día + tipo): una cancelación de jornada completa (mañana+tarde)
+  // queda guardada internamente como hasta 2 registros, pero acá cuenta como UNA sola falta.
+  const eventosMap={};
+  for(const b of delMes){ const k=b.ownerUid||b.nombre, ek=`${k}__${b.fecha}__${tipoDe(b)}`;
+    if(!eventosMap[ek]) eventosMap[ek]={ key:k, nombre:b.nombre, fecha:b.fecha, tipo:tipoDe(b), bloques:[], pagado:false, debita:false, ts:0 };
+    const ev=eventosMap[ek];
+    if(b.bloque && !ev.bloques.includes(b.bloque)) ev.bloques.push(b.bloque);
+    if(b.pagado) ev.pagado=true;
+    if(b.debita!==false) ev.debita=true;
+    if(b.ts) ev.ts=Math.max(ev.ts,b.ts);
+  }
+  const eventos=Object.values(eventosMap);
   const porPersona={};
-  for(const b of delMes){ const k=b.ownerUid||b.nombre;
-    if(!porPersona[k]) porPersona[k]={key:k, nombre:b.nombre, tarde:0, noshow:0, pend:0, registros:[]};
-    const p=porPersona[k]; tipoDe(b)==="tarde" ? p.tarde++ : p.noshow++; if(!b.pagado && b.debita!==false) p.pend++;
-    p.registros.push(b); }
+  for(const ev of eventos){ const k=ev.key;
+    if(!porPersona[k]) porPersona[k]={key:k, nombre:ev.nombre, tarde:0, noshow:0, pend:0, eventos:[]};
+    const p=porPersona[k]; ev.tipo==="tarde" ? p.tarde++ : p.noshow++; if(!ev.pagado && ev.debita) p.pend++;
+    p.eventos.push(ev); }
   const rank=Object.values(porPersona).map(p=>Object.assign(p,{total:p.tarde+p.noshow}))
     .sort((a,b)=> b.total-a.total || a.nombre.localeCompare(b.nombre,"es"));
   const tT=rank.reduce((s,p)=>s+p.tarde,0), tN=rank.reduce((s,p)=>s+p.noshow,0);
   const detalleDe=(p)=>{
     if(state.histExpand!==p.key) return "";
-    const filas=p.registros.slice().sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")).map(r=>{
-      const d=new Date((r.fecha||"")+"T00:00:00");
-      const cuando=isNaN(d.getTime())?(r.fecha||""):`${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
-      const blab=bloque(r.bloque)?bloque(r.bloque).label:"";
-      const tipoLbl=tipoDe(r)==="tarde"?"canceló tarde":"no vino";
-      const estado = r.pagado ? "✓ pagado" : (r.debita===false ? "sin deuda (no llegó a la 3ª)" : "pendiente 🥐");
+    const filas=p.eventos.slice().sort((a,b)=>(a.fecha||"").localeCompare(b.fecha||"")).map(ev=>{
+      const d=new Date((ev.fecha||"")+"T00:00:00");
+      const cuando=isNaN(d.getTime())?(ev.fecha||""):`${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
+      const blab=ev.bloques.map(b=>bloque(b)?bloque(b).label:b).join(" y ");
+      const tipoLbl=ev.tipo==="tarde"?"canceló tarde":"no vino";
+      const estado = ev.pagado ? "✓ pagado" : (!ev.debita ? "sin deuda (no llegó a la 3ª)" : "pendiente 🥐");
       return `<div class="hist-det-row"><span>${cuando}${blab?` · ${blab}`:""} · ${tipoLbl}</span><span class="hist-det-estado">${estado}</span></div>`;
     }).join("");
     return `<div class="hist-detail">${filas}</div>`;
@@ -1167,21 +1207,26 @@ async function setModalidad(mod){
   toast(mod==="oficina" ? "Modalidad: Oficina. Tocá tu silla." : `Marcado: ${modal(mod).label}.`);
 }
 async function cancelar(seatId){
-  let n=0, algunaTarde=false, algunaDebita=false, van=0;
-  const mes=mesDe({fecha:state.fecha});
-  let contador=contarStrikes(state.uid, mes);
+  let n=0, bloquesTarde=[];
   for(const bid of bloquesActivos()){
     if(miAsiento(bid)!==seatId) continue;
     const tarde = !sePuedeCancelar(state.fecha,bid);
-    try{ await Store.cancelar(`${state.fecha}__${seatId}__${bid}`); n++;
-      if(tarde){ algunaTarde=true; contador++; van=contador; const debita=(contador%3===0); if(debita) algunaDebita=true;
-        const bzid=`${state.fecha}__${bid}__${state.uid}`; try{ await Store.addBizcocho(bzid,
-        { id:bzid, nombre:state.nombre, ownerUid:state.uid, fecha:state.fecha, bloque:bid, motivo:"canceló tarde", tipo:"tarde", debita, ts:Date.now() }); }catch(e){} }
-    }catch(e){ toast("No se pudo cancelar."); }
+    try{ await Store.cancelar(`${state.fecha}__${seatId}__${bid}`); n++; if(tarde) bloquesTarde.push(bid); }
+    catch(e){ toast("No se pudo cancelar."); }
+  }
+  let algunaDebita=false, van=0;
+  if(bloquesTarde.length){
+    // UNA sola falta por esta cancelación, aunque haya afectado varios turnos (jornada completa = 1, no 2).
+    const mes=mesDe({fecha:state.fecha});
+    van=contarStrikes(state.uid, mes)+1; algunaDebita=(van%3===0);
+    const bid0=bloquesTarde[0], bzid=`${state.fecha}__${bid0}__${state.uid}`;
+    const labelBloques=bloquesTarde.map(b=>bloque(b).label).join(" y ");
+    try{ await Store.addBizcocho(bzid, { id:bzid, nombre:state.nombre, ownerUid:state.uid, fecha:state.fecha,
+      bloque:bid0, bloques:bloquesTarde, motivo:`canceló tarde (${labelBloques})`, tipo:"tarde", debita:algunaDebita, ts:Date.now() }); }catch(e){}
   }
   if(n){
     if(algunaDebita) toast(`Cancelado ${seatId}. Van 3 cancelaciones tardías/inasistencias este mes → te toca traer bizcochos 🥐`);
-    else if(algunaTarde) toast(`Cancelado ${seatId}. Van ${van} de 3 este mes.`);
+    else if(bloquesTarde.length) toast(`Cancelado ${seatId}. Van ${van} de 3 este mes.`);
     else toast(`Cancelado ${seatId}.`);
   }
 }
@@ -1194,7 +1239,7 @@ async function confirmarReserva(){
   try{
     const me=state.uid, turnos=bloquesActivos(), dias=[...state.diasSel]; let diasOk=0, diasNo=0, hayErrorTecnico=false;
     for(const dia of dias){
-      // Ese puesto puede estar bloqueado solo algunos días de la semana (ej. Lun-Mié). Si este día cae bloqueado, se salta.
+      // Ese puesto puede estar bloqueado solo algunos días de la semana (ej. Lun-Mié) o en una fecha puntual. Si este día cae bloqueado, se salta.
       if(bloqueadoEn(seatId, dia)){ diasNo++; continue; }
       // Reservo TODOS los turnos del día en una transacción atómica: o entra completo, o no entra nada.
       let res;
