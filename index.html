@@ -266,7 +266,7 @@
       <span><span class="brandname">CSI</span><span class="brandtag">GTLyT</span></span>
     </div>
     <h1>Reservá tu asiento</h1>
-    <p class="sub">Elegí el día y el turno, y tocá una silla libre. Gris es libre, rojo está reservado y verde es tu lugar. Podés cancelar hasta 4&nbsp;h antes del turno; cancelar más tarde o no cumplir la reserva se anota, y a la 3&ordf; vez en el mes te toca traer bizcochos 🥐.</p>
+    <p class="sub">Elegí el día y el turno, y tocá una silla libre. Gris es libre, rojo está reservado y verde es tu lugar. Podés cancelar hasta 4&nbsp;h antes del turno; cancelar más tarde o no cumplir la reserva se anota, y cada 3 faltas acumuladas en el año (se suman de un mes al otro) te toca traer bizcochos 🥐.</p>
     <div id="userbar" class="userbar" hidden>Entraste como <b id="userEmail"></b><button id="logout" class="btn ghost tiny">No soy yo / Salir</button></div>
   </header>
 
@@ -329,7 +329,7 @@
         <span class="plano-title">🥐 Deben bizcochos</span>
         <span class="occ" id="bizCount"></span>
       </div>
-      <div class="hint" id="bizHint" hidden>Se anota cada cancelación tardía o inasistencia. Cada 3 en el mes (por persona) genera una deuda real. Tocá “Ya trajo” cuando cumpla, o “Justificar” si tuvo un imprevisto (no cuenta en el historial).</div>
+      <div class="hint" id="bizHint" hidden>Se anota cada cancelación tardía o inasistencia. Cada 3 faltas acumuladas en el año (por persona, sumando los meses; se reinicia cada 1 de enero) genera una deuda real. Tocá “Ya trajo” cuando cumpla, o “Justificar” si tuvo un imprevisto (no cuenta en el historial).</div>
       <div id="bizActions" class="biz-actions"></div>
       <div id="bizList" class="biz-list"></div>
     </section>
@@ -346,7 +346,7 @@
       <div class="plano-head">
         <span class="plano-title">🔧 Anotaciones sin deuda (admin)</span>
       </div>
-      <div class="hint">Cancelaciones/inasistencias que todavía no llegaron a la 3ª del mes, por eso no aparecen arriba en "Deben bizcochos". Si anotaste algo por error, justificalo acá.</div>
+      <div class="hint">Cancelaciones/inasistencias que todavía no llegaron a la 3ª falta acumulada del año, por eso no aparecen arriba en "Deben bizcochos". Si anotaste algo por error, justificalo acá.</div>
       <div id="gestionList" class="biz-list"></div>
     </section>
 
@@ -380,7 +380,7 @@
   </div>
 
   <footer>
-    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.8</b>
+    Ingreso por lista de nombres · Reservas sincronizadas en tiempo real · Hecho para CSI. · <b>v3.9</b>
   </footer>
 </div>
 
@@ -974,12 +974,19 @@ function renderBizcochos(){
 const MESL=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const mesDe=(b)=> (b.fecha||"").slice(0,7);
 const tipoDe=(b)=> b.tipo || (/cancel/i.test(b.motivo||"") ? "tarde" : "noshow");
-/* Reincidencia: cuenta cancelaciones tardías + no-shows del mes (sin contar justificadas).
+/* Reincidencia: cuenta cancelaciones tardías + no-shows acumulados entre meses (sin contar justificadas).
    Cada 3ra vez (3,6,9…) se marca "debita:true" y recién ahí genera una deuda de bizcochos real. */
 /* Cuenta EVENTOS distintos (día+tipo), no documentos sueltos: cancelar jornada completa de una
    vez (mañana+tarde) es UNA falta, no dos, aunque por dentro haya quedado más de un registro. */
-const contarStrikes = (email, mes) => {
-  const regs=(state.bizcochos||[]).filter(b=> b.ownerUid===email && mesDe(b)===mes && !b.justificado);
+/* ACUMULABLE ENTRE MESES, CON REINICIO ANUAL: las faltas de una persona se suman mes a mes durante
+   el año calendario y el contador vuelve a cero cada 1 de enero. Solo en 2026 se toma como inicio
+   el 1 de octubre (CUENTA_DESDE). No se reinicia al pagar. Cada 3ª falta del año (3, 6, 9…) genera deuda. */
+const CUENTA_DESDE = "2026-10-01";
+const contarStrikes = (email, fecha) => {
+  const anio=(fecha||ymd(new Date())).slice(0,4);
+  const desde = (`${anio}-01-01` > CUENTA_DESDE) ? `${anio}-01-01` : CUENTA_DESDE;
+  const hasta = `${anio}-12-31`;
+  const regs=(state.bizcochos||[]).filter(b=> b.ownerUid===email && (b.fecha||"")>=desde && (b.fecha||"")<=hasta && !b.justificado);
   return new Set(regs.map(b=>`${b.fecha}__${tipoDe(b)}`)).size;
 };
 function renderHistorial(){
@@ -1022,7 +1029,7 @@ function renderHistorial(){
       const cuando=isNaN(d.getTime())?(ev.fecha||""):`${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
       const blab=ev.bloques.map(b=>bloque(b)?bloque(b).label:b).join(" y ");
       const tipoLbl=ev.tipo==="tarde"?"canceló tarde":"no vino";
-      const estado = ev.pagado ? "✓ pagado" : (!ev.debita ? "sin deuda (no llegó a la 3ª)" : "pendiente 🥐");
+      const estado = ev.pagado ? "✓ pagado" : (!ev.debita ? "sin deuda (no completó las 3 acumuladas del año)" : "pendiente 🥐");
       return `<div class="hist-det-row"><span>${cuando}${blab?` · ${blab}`:""} · ${tipoLbl}</span><span class="hist-det-estado">${estado}</span></div>`;
     }).join("");
     return `<div class="hist-detail">${filas}</div>`;
@@ -1137,13 +1144,12 @@ async function confirmarAnotar(){
   const email=$("anPersona").value; const p=PERSONAS.find(x=>x.email===email);
   if(!p){ return; }
   const motivo=($("anMotivo").value||"").trim()||"no vino";
-  const mes=mesDe({fecha:state.fecha});
-  const n=contarStrikes(email, mes)+1, debita=(n%3===0);
+  const n=contarStrikes(email, state.fecha)+1, debita=(n%3===0);
   const id=`manual__${email}__${Date.now()}`;
   try{ await Store.addBizcocho(id,{ id, nombre:p.nombre, ownerUid:email, fecha:state.fecha, motivo, tipo:"noshow", debita, ts:Date.now(), manual:true }); }
   catch(e){ const m=$("anMsg"); if(m) m.textContent="No se pudo anotar. Reintentá."; return; }
   cerrarAnotar();
-  toast(debita ? `Anotado. Van 3 este mes → le toca traer bizcochos 🥐` : `Anotado. Van ${n} de 3 este mes.`);
+  toast(debita ? `Anotado. Van ${n} faltas acumuladas → le toca traer bizcochos 🥐` : `Anotado. Van ${n} faltas acumuladas (${((n-1)%3)+1} de 3 para el próximo bizcocho).`);
 }
 function infoAsiento(id){ const a=ASIENTOS.find(x=>x.id===id); return a?`OFIC. ${a.sala} · puesto ${a.label}`:id; }
 function clearPending(){ state.pending=null; state.pendingMod=null; state.diasSel=new Set(); renderConfirm(); }
@@ -1194,16 +1200,15 @@ async function cancelar(seatId){
   let algunaDebita=false, van=0;
   if(bloquesTarde.length){
     // UNA sola falta por esta cancelación, aunque haya afectado varios turnos (jornada completa = 1, no 2).
-    const mes=mesDe({fecha:state.fecha});
-    van=contarStrikes(state.uid, mes)+1; algunaDebita=(van%3===0);
+    van=contarStrikes(state.uid, state.fecha)+1; algunaDebita=(van%3===0);
     const bid0=bloquesTarde[0], bzid=`${state.fecha}__${bid0}__${state.uid}`;
     const labelBloques=bloquesTarde.map(b=>bloque(b).label).join(" y ");
     try{ await Store.addBizcocho(bzid, { id:bzid, nombre:state.nombre, ownerUid:state.uid, fecha:state.fecha,
       bloque:bid0, bloques:bloquesTarde, motivo:`canceló tarde (${labelBloques})`, tipo:"tarde", debita:algunaDebita, ts:Date.now() }); }catch(e){}
   }
   if(n){
-    if(algunaDebita) toast(`Cancelado ${seatId}. Van 3 cancelaciones tardías/inasistencias este mes → te toca traer bizcochos 🥐`);
-    else if(bloquesTarde.length) toast(`Cancelado ${seatId}. Van ${van} de 3 este mes.`);
+    if(algunaDebita) toast(`Cancelado ${seatId}. Llevás ${van} faltas acumuladas (cada 3 se traen bizcochos) → te toca traer bizcochos 🥐`);
+    else if(bloquesTarde.length) toast(`Cancelado ${seatId}. Llevás ${van} faltas acumuladas (${((van-1)%3)+1} de 3 para el próximo bizcocho).`);
     else toast(`Cancelado ${seatId}.`);
   }
 }
@@ -1327,7 +1332,7 @@ $("zonas").addEventListener("click",e=>{
     const detalle=oc.pares.map(p=> p.r ? `${p.r.ownerUid===state.uid?"vos":p.r.nombre} (${bloque(p.b).label})` : `libre (${bloque(p.b).label})`).join(" · ");
     if(oc.mio){
       const tarde=oc.mioBloques.some(bid=>!sePuedeCancelar(state.fecha,bid));
-      const aviso=tarde ? "\n\n⚠️ Cancelando con menos de 4 h de antelación: cuenta para el cupo de bizcochos del mes (a la 3ª, te toca traer)." : "";
+      const aviso=tarde ? "\n\n⚠️ Cancelando con menos de 4 h de antelación: suma a tus faltas acumuladas (cada 3, te toca traer bizcochos)." : "";
       if(confirm(`Este puesto está repartido: ${detalle}.\n\n¿Cancelar TU parte (${oc.mioBloques.map(b=>bloque(b).label).join(" y ")})?${aviso}`)) cancelar(seatId);
     } else { toast(`${seatId} está repartido: ${detalle}.`); }
     return;
@@ -1341,7 +1346,7 @@ $("zonas").addEventListener("click",e=>{
   }
   if(oc.mio){
     const tarde=bloquesActivos().some(bid=> miAsiento(bid)===seatId && !sePuedeCancelar(state.fecha,bid));
-    const aviso=tarde ? "\n\n⚠️ Cancelando con menos de 4 h de antelación: cuenta para el cupo de bizcochos del mes (a la 3ª, te toca traer)." : "";
+    const aviso=tarde ? "\n\n⚠️ Cancelando con menos de 4 h de antelación: suma a tus faltas acumuladas (cada 3, te toca traer bizcochos)." : "";
     if(confirm(`¿Cancelar tu reserva de ${seatId} (${etiquetaTurno()})?${aviso}`)) cancelar(seatId);
     return;
   }
