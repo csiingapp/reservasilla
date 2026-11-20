@@ -1118,12 +1118,15 @@ function abrirAnotar(){
   if(!soyAdmin()) return;
   const opts=PERSONAS.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre,"es"))
     .map(p=>`<option value="${p.email}">${p.nombre}</option>`).join("");
-  const d=new Date(state.fecha+"T00:00:00"); const dl=`${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}`;
+  const hoyK=ymd(new Date());
+  const fechaIni = state.fecha && state.fecha<=hoyK ? state.fecha : hoyK;
   const w=$("bizWrap");
   w.innerHTML=`
     <div class="pincard">
       <div class="pintitle">Anotar deuda 🥐</div>
-      <p class="pinsub">Se suma a la lista para el <b>${dl}</b>.</p>
+      <p class="pinsub">Elegí el día de la falta (puede ser de días anteriores).</p>
+      <label class="fld">Fecha de la falta</label>
+      <input id="anFecha" class="pininput" type="date" value="${fechaIni}" min="${CUENTA_DESDE}" max="${hoyK}" />
       <label class="fld">Persona</label>
       <select id="anPersona" class="pinselect">${opts}</select>
       <label class="fld">Motivo</label>
@@ -1144,9 +1147,12 @@ async function confirmarAnotar(){
   const email=$("anPersona").value; const p=PERSONAS.find(x=>x.email===email);
   if(!p){ return; }
   const motivo=($("anMotivo").value||"").trim()||"no vino";
-  const n=contarStrikes(email, state.fecha)+1, debita=(n%3===0);
+  const fechaF=($("anFecha")&&$("anFecha").value)||ymd(new Date());
+  if(fechaF>ymd(new Date())){ const m=$("anMsg"); if(m) m.textContent="La fecha no puede ser futura."; return; }
+  if(fechaF<CUENTA_DESDE){ const m=$("anMsg"); if(m) m.textContent="Antes del "+CUENTA_DESDE.split("-").reverse().join("/")+" las faltas no se cuentan."; return; }
+  const n=contarStrikes(email, fechaF)+1, debita=(n%3===0);
   const id=`manual__${email}__${Date.now()}`;
-  try{ await Store.addBizcocho(id,{ id, nombre:p.nombre, ownerUid:email, fecha:state.fecha, motivo, tipo:"noshow", debita, ts:Date.now(), manual:true }); }
+  try{ await Store.addBizcocho(id,{ id, nombre:p.nombre, ownerUid:email, fecha:fechaF, motivo, tipo:"noshow", debita, ts:Date.now(), manual:true }); }
   catch(e){ const m=$("anMsg"); if(m) m.textContent="No se pudo anotar. Reintentá."; return; }
   cerrarAnotar();
   toast(debita ? `Anotado. Van ${n} faltas acumuladas → le toca traer bizcochos 🥐` : `Anotado. Van ${n} faltas acumuladas (${((n-1)%3)+1} de 3 para el próximo bizcocho).`);
